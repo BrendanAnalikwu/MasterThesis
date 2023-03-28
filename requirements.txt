@@ -1,0 +1,3 @@
+torch~=2.0.0+cu117
+matplotlib~=3.7.1
+torchvision~=0.15.1+cu117
