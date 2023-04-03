@@ -1,3 +1,8 @@
-//
-// Created by Brend on 3-4-2023.
-//
+#include "seaiceproblem.h"
+
+int main(int argc, char** argv)
+{
+    Gascoigne::ParamFile paramfile("seaice.param")
+
+
+}
