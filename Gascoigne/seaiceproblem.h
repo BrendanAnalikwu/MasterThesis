@@ -42,6 +42,17 @@ namespace Gascoigne {
         }
     };
 
+    class SeaIceInitial : public DomainRightHandSide {
+    public:
+        int GetNcomp() const override { return 2; }
+
+        std::string GetName() const override { return "Sea_Ice_Initial_Values"; }
+
+        double operator()(int c, const Vertex2d &v) const override {
+            return 0.; //TODO: implement
+        }
+    };
+
     class SeaIceEquation : public virtual Equation {
     public:
         SeaIceEquation *createNew() const override { return new SeaIceEquation(); }
@@ -67,7 +78,7 @@ namespace Gascoigne {
             GetEquationPointer() = new SeaIceEquation;
             GetRightHandSidePointer() = new SeaIceRHS;
             GetDirichletDataPointer() = new ZeroDirichletData;
-
+            GetInitialConditionPointer() = new SeaIceInitial;
         }
     };
 
