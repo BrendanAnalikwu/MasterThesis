@@ -9,6 +9,29 @@
 
 namespace Gascoigne {
 
+    class ZeroDirichletData : public DirichletData
+    {
+    protected:
+    public:
+        ZeroDirichletData()
+        {
+            std::cerr << "ZeroDirichletData without comps and colors" << std::endl;
+            abort();
+        }
+        explicit ZeroDirichletData(const ParamFile& pf)
+                : DirichletData(pf)
+        {}
+        std::string GetName() const override { return "Zero"; }
+        void operator()(DoubleVector& b, const Vertex2d& v, int col) const override
+        {
+            b.zero();
+        }
+        void operator()(DoubleVector& b, const Vertex3d& v, int col) const override
+        {
+            b.zero();
+        }
+    };
+
     class SeaIceRHS : public DomainRightHandSide
     {
     public:
@@ -45,7 +68,7 @@ namespace Gascoigne {
 
             GetEquationPointer() = new SeaIceEquation;
             GetRightHandSidePointer() = new SeaIceRHS;
-            GetDirichletDataPointer() = new ...;
+            GetDirichletDataPointer() = new ZeroDirichletData;
 
         }
     };
