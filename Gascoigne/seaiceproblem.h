@@ -9,57 +9,55 @@
 
 namespace Gascoigne {
 
-    class ZeroDirichletData : public DirichletData
-    {
+    class ZeroDirichletData : public DirichletData {
     protected:
     public:
-        ZeroDirichletData()
-        {
+        ZeroDirichletData() {
             std::cerr << "ZeroDirichletData without comps and colors" << std::endl;
             abort();
         }
-        explicit ZeroDirichletData(const ParamFile& pf)
-                : DirichletData(pf)
-        {}
+
+        explicit ZeroDirichletData(const ParamFile &pf)
+                : DirichletData(pf) {}
+
         std::string GetName() const override { return "Zero"; }
-        void operator()(DoubleVector& b, const Vertex2d& v, int col) const override
-        {
+
+        void operator()(DoubleVector &b, const Vertex2d &v, int col) const override {
             b.zero();
         }
-        void operator()(DoubleVector& b, const Vertex3d& v, int col) const override
-        {
+
+        void operator()(DoubleVector &b, const Vertex3d &v, int col) const override {
             b.zero();
         }
     };
 
-    class SeaIceRHS : public DomainRightHandSide
-    {
+    class SeaIceRHS : public DomainRightHandSide {
     public:
         int GetNcomp() const override { return 2; }
 
         std::string GetName() const override { return "Sea_Ice_Right_Hand_Side"; }
 
-        double operator()(int c, const Vertex2d& v) const override
-        {
+        double operator()(int c, const Vertex2d &v) const override {
             return 0.; //TODO:  implement
         }
     };
 
-    class SeaIceEquation : public virtual Equation
-    {
+    class SeaIceEquation : public virtual Equation {
     public:
-        SeaIceEquation* createNew() const override { return new SeaIceEquation(); }
+        SeaIceEquation *createNew() const override { return new SeaIceEquation(); }
 
         int GetNcomp() const override { return 2; };
 
         std::string GetName() const override { return "Sea_Ice_Equation"; };
 
         void point(double h, const Vertex2d &v) const {}
-        void point(double h, const Vertex3d& v) const {}
 
-        void Form(VectorIterator b, const FemFunction& U, const TestFunction& N) const override { } //TODO:  implement
+        void point(double h, const Vertex3d &v) const {}
 
-        void Matrix(EntryMatrix& A, const FemFunction& U, const TestFunction& M, const TestFunction &N) const override { } //TODO:  implement
+        void Form(VectorIterator b, const FemFunction &U, const TestFunction &N) const override {} //TODO:  implement
+
+        void Matrix(EntryMatrix &A, const FemFunction &U, const TestFunction &M,
+                    const TestFunction &N) const override {} //TODO:  implement
     };
 
     class SeaIceProblem : public ProblemDescriptorBase {
