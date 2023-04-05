@@ -1,8 +1,8 @@
 #include "seaiceproblem.h"
 
-int main(int argc, char** argv)
+int main(int argc, char **argv)
 {
-    Gascoigne::ParamFile paramfile("seaice.param")
+    Gascoigne::ParamFile paramfile("seaice.param");
 
 
 }
