@@ -1,8 +1,9 @@
 import torch
 import torch.utils.data
 from torchvision import datasets, transforms
-from torchvision.utils import make_grid
+from torchvision.utils import make_grid, save_image
 import matplotlib.pyplot as plt
+from tqdm import trange
 
 
 class AutoEncoderNet(torch.nn.Module):
@@ -69,8 +70,12 @@ tensor_transform = transforms.ToTensor()
 
 # Get data
 dataset = datasets.MNIST(root="./data", train=True, download=True, transform=tensor_transform)
+dataset_test = datasets.MNIST(root="./data", train=False, download=True, transform=tensor_transform)
 
 loader = torch.utils.data.DataLoader(dataset=dataset, batch_size=32, shuffle=True)
+loader_test = torch.utils.data.DataLoader(dataset=dataset_test, batch_size=64, shuffle=True)
+test, _ = next(iter(loader_test))
+save_image(make_grid(test.detach(), nrow=8), f"data_test.png")
 
 model = AutoEncoderNet()
 optimizer = torch.optim.Adam(model.parameters(), lr=1e-3)
@@ -79,7 +84,7 @@ epochs = 20
 outputs = []
 losses = []
 loss_func = torch.nn.MSELoss()
-for epoch in range(epochs):
+for epoch in trange(epochs):
     for (im, _) in loader:
         res = model(im)
         loss = loss_func(res, im)
@@ -90,6 +95,7 @@ for epoch in range(epochs):
 
         losses.append(loss.item())
     outputs.append((epochs, im.detach(), res.detach()))
+    save_image(make_grid(model(test).detach(), nrow=8), f"result_{epoch}.png")
 
 plt.plot(losses)
 
