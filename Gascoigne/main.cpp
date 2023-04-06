@@ -1,7 +1,17 @@
-#include <iostream>
+#include "heatproblem.h"
+#include "paramfile.h"
+#include "filescanner.h"
+#include "stdloop.h"
 
-int main()
+using namespace Gascoigne;
+using namespace std;
+
+int main(int argc, char **argv)
 {
-    std::cout << "Hello, World!" << std::endl;
+    ParamFile paramFile("heat.param");
+
+    HeatProblem HP;
+    HP.BasicInit(paramFile);
+
     return 0;
 }

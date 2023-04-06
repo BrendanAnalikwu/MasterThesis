@@ -1,0 +1,104 @@
+#ifndef GASCOIGNE_HEATPROBLEM_H
+#define GASCOIGNE_HEATPROBLEM_H
+
+#include "problemdescriptorbase.h"
+
+namespace Gascoigne
+{
+
+class ZeroDirichletData : public DirichletData
+{
+protected:
+public:
+    ZeroDirichletData()
+    {
+        std::cerr << "ZeroDirichletData without comps and colors" << std::endl;
+        abort();
+    }
+
+    explicit ZeroDirichletData(const ParamFile &pf) : DirichletData(pf) {}
+
+    std::string GetName() const override { return "Zero"; }
+
+    void operator()(DoubleVector &b, const Vertex2d &v, int col) const override { b.zero(); }
+
+    void operator()(DoubleVector &b, const Vertex3d &v, int col) const override { b.zero(); }
+};
+
+class HeatRHS : public DomainRightHandSide
+{
+private:
+    std::vector<double> a, b;
+    int n_a{}, n_b{};
+
+public:
+    HeatRHS() = default;
+
+    explicit HeatRHS(const ParamFile &pf)
+    {
+        DataFormatHandler DFH;
+        DFH.insert("a", &a);
+        DFH.insert("b", &b);
+        FileScanner FS(DFH, pf, "RHS");
+        // I think a and b remain uninitialized if they were not set in paramfile
+        n_a = (int) a.size();
+        n_b = (int) b.size();
+    }
+
+    HeatRHS *createNew() const override { return new HeatRHS(); }
+
+    int GetNcomp() const override { return 2; }
+
+    std::string GetName() const override { return "Heat_Right_Hand_Side"; }
+
+    double operator()(int c, const Vertex2d &v)
+    {
+        double res_a(0.), res_b(0.);
+        for (int i = 0; i < n_a; n_a++) res_a += a[i] * sin(M_PI * i * v.x());
+        for (int i = 0; i < n_b; n_b++) res_b += b[i] * sin(M_PI * i * v.y());
+        return res_a * res_b;
+    }
+};
+
+
+class HeatEquation : public virtual Equation
+{
+    HeatEquation *createNew() const override { return new HeatEquation(); }
+
+    int GetNcomp() const override { return 1; }
+
+    std::string GetName() const override { return "Heat_Equation"; }
+
+    void point(double h, const Vertex2d &v) const {}
+
+    void point(double h, const Vertex3d &v) const {}
+
+    void Form(VectorIterator b, const FemFunction &U, const TestFunction &N) const override
+    {
+        b[0] += U[0].x() * N.x() + U[0].y() * N.y();
+    }
+
+    void Matrix(EntryMatrix &A, const FemFunction &U, const TestFunction &M,
+                const TestFunction &N) const override
+    {
+        A(0, 0) += M.x() * N.x() + M.y() * N.y();
+    }
+};
+
+
+class HeatProblem : public ProblemDescriptorBase
+{
+public:
+    void BasicInit(const ParamFile &pf) override
+    {
+        GetParamFile() = pf;
+
+        GetEquationPointer() = new HeatEquation;
+        GetRightHandSidePointer() = new HeatRHS(pf);
+        GetDirichletDataPointer() = new ZeroDirichletData;
+    }
+};
+
+}
+
+#endif //GASCOIGNE_HEATPROBLEM_H
