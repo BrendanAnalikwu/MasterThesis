@@ -13,5 +13,14 @@ int main(int argc, char **argv)
     HeatProblem HP;
     HP.BasicInit(paramFile);
 
+    ProblemContainer PC;
+    PC.AddProblem("heat", &HP);
+
+    FunctionalContainer FC;
+
+    StdLoop loop;
+    loop.BasicInit(paramFile, &PC, &FC);
+    loop.run("heat");
+
     return 0;
 }
