@@ -2,6 +2,9 @@
 #define GASCOIGNE_HEATPROBLEM_H
 
 #include "problemdescriptorbase.h"
+#include "paramfile.h"
+#include "filescanner.h"
+#include "stdloop.h"
 
 namespace Gascoigne
 {
@@ -28,11 +31,15 @@ public:
 class HeatRHS : public DomainRightHandSide
 {
 private:
-    std::vector<double> a, b;
+    DoubleVector a, b;
     int n_a{}, n_b{};
 
 public:
-    HeatRHS() = default;
+    HeatRHS() : n_a(1), n_b(1)
+    {
+        a.push_back(0);
+        b.push_back(0);
+    }
 
     explicit HeatRHS(const ParamFile &pf)
     {
@@ -51,15 +58,14 @@ public:
 
     std::string GetName() const override { return "Heat_Right_Hand_Side"; }
 
-    double operator()(int c, const Vertex2d &v)
+    double operator()(int c, const Vertex2d &v) const
     {
         double res_a(0.), res_b(0.);
-        for (int i = 0; i < n_a; n_a++) res_a += a[i] * sin(M_PI * i * v.x());
-        for (int i = 0; i < n_b; n_b++) res_b += b[i] * sin(M_PI * i * v.y());
+        for (int i = 0; i < n_a; i++) res_a += a[i] * sin(M_PI * i * v.x());
+        for (int i = 0; i < n_b; i++) res_b += b[i] * sin(M_PI * i * v.y());
         return res_a * res_b;
     }
 };
-
 
 class HeatEquation : public virtual Equation
 {
