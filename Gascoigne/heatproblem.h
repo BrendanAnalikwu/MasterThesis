@@ -101,7 +101,8 @@ public:
 
         GetEquationPointer() = new HeatEquation;
         GetRightHandSidePointer() = new HeatRHS(pf);
-        GetDirichletDataPointer() = new ZeroDirichletData;
+        GetDirichletDataPointer() = new ZeroDirichletData(pf);
+        ProblemDescriptorBase::BasicInit(pf);
     }
 };
 
