@@ -5,6 +5,7 @@
 #include "paramfile.h"
 #include "filescanner.h"
 #include "stdloop.h"
+#include "exactsolution.h"
 
 namespace Gascoigne
 {
@@ -66,7 +67,7 @@ public:
         {
             res_a += a[i - 1] * sin(M_PI * i * v.x());
         }
-        for (int i = 1; i <= n_b; i++) res_b += b[i-1] * sin(M_PI * i * v.y());
+        for (int i = 1; i <= n_b; i++) res_b += b[i - 1] * sin(M_PI * i * v.y());
         return res_a * res_b;
     }
 };
@@ -95,6 +96,35 @@ class HeatEquation : public virtual Equation
     }
 };
 
+class ExactHeatSolution : public ExactSolution
+{
+private:
+    DoubleVector a, b;
+    int n_a{}, n_b{};
+    const ParamFile pf;
+
+public:
+    ExactHeatSolution(const ParamFile &pf) : pf(pf)
+    {
+        DataFormatHandler DFH;
+        DFH.insert("a", &a);
+        DFH.insert("b", &b);
+        FileScanner FS(DFH, pf, "RHS");
+        // I think a and b remain uninitialized if they were not set in paramfile
+        n_a = (int) a.size();
+        n_b = (int) b.size();
+    }
+
+    double operator()(int c, const Vertex2d &v) const
+    {
+        double res(0.);
+        for (int i = 1; i <= n_a; i++)
+            for (int j = 1; j <= n_b; j++)
+                res += a[i - 1] * b[j - 1] * sin(M_PI * i * v.x()) * sin(M_PI * j * v.y())
+                       / ((i * i + j * j) * M_PI * M_PI);
+        return res;
+    }
+};
 
 class HeatProblem : public ProblemDescriptorBase
 {
@@ -106,6 +136,7 @@ public:
         GetEquationPointer() = new HeatEquation;
         GetRightHandSidePointer() = new HeatRHS(pf);
         GetDirichletDataPointer() = new ZeroDirichletData(pf);
+        GetExactSolutionPointer() = new ExactHeatSolution(pf);
         ProblemDescriptorBase::BasicInit(pf);
     }
 };
