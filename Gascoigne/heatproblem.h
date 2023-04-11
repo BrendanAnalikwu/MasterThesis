@@ -33,6 +33,7 @@ class HeatRHS : public DomainRightHandSide
 private:
     DoubleVector a, b;
     int n_a{}, n_b{};
+    const ParamFile pf;
 
 public:
     HeatRHS() : n_a(1), n_b(1)
@@ -41,7 +42,7 @@ public:
         b.push_back(0);
     }
 
-    explicit HeatRHS(const ParamFile &pf)
+    explicit HeatRHS(const ParamFile &pf) : pf(pf)
     {
         DataFormatHandler DFH;
         DFH.insert("a", &a);
@@ -52,17 +53,20 @@ public:
         n_b = (int) b.size();
     }
 
-    HeatRHS *createNew() const override { return new HeatRHS(); }
+    HeatRHS *createNew() const override { return new HeatRHS(pf); }
 
     int GetNcomp() const override { return 2; }
 
     std::string GetName() const override { return "Heat_Right_Hand_Side"; }
 
-    double operator()(int c, const Vertex2d &v) const
+    double operator()(int c, const Vertex2d &v) const override
     {
         double res_a(0.), res_b(0.);
-        for (int i = 0; i < n_a; i++) res_a += a[i] * sin(M_PI * i * v.x());
-        for (int i = 0; i < n_b; i++) res_b += b[i] * sin(M_PI * i * v.y());
+        for (int i = 1; i <= n_a; i++)
+        {
+            res_a += a[i - 1] * sin(M_PI * i * v.x());
+        }
+        for (int i = 1; i <= n_b; i++) res_b += b[i-1] * sin(M_PI * i * v.y());
         return res_a * res_b;
     }
 };
