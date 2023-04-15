@@ -1,8 +1,9 @@
 import glob
 from typing import Tuple
-
 import torch
+import torch.utils.data
 import numpy as np
+from tqdm import trange
 
 
 class HeatNet(torch.nn.Module):
@@ -41,14 +42,34 @@ class HeatNet(torch.nn.Module):
         return self.model(x)
 
 
-def get_dataset(Nx: int, Ny: int, name='latest') -> Tuple[torch.Tensor, torch.Tensor]:
+def get_dataset(Nx: int, Ny: int, name='latest') -> torch.utils.data.Dataset:
     if name == 'latest':
         name = max([int(s.strip('dataset_8_8_33x33_.gz')) for s in glob.glob('dataset_8_8_33x33_*.gz')])
     raw_data = np.loadtxt(f'dataset_8_8_33x33_{name}.gz')
-    return torch.tensor(raw_data[:, :Nx + Ny]), torch.tensor(raw_data[:, Nx + Ny:]).reshape(-1, 33, 33)
+    return torch.utils.data.TensorDataset(torch.tensor(raw_data[:, :Nx + Ny]),
+                                          torch.tensor(raw_data[:, Nx + Ny:]).reshape(-1, 33, 33))
 
 
-data, labels = get_dataset(8, 8)
-print(f'Number of samples in dataset is {len(data)}')
+Nx = 8
+Ny = 8
+dataset = get_dataset(Nx, Ny)
+loader = torch.utils.data.DataLoader(dataset=dataset, batch_size=32, shuffle=True)
+
+model = HeatNet(Nx, Ny)
+optimizer = torch.optim.Adam(model.parameters(), lr=1e-3)
+loss_func = torch.nn.MSELoss()
+
+epochs = 10
+losses = []
+for epoch in trange(epochs):
+    for im, _ in loader:
+        res = model(im)
+        loss = loss_func(res, im)
+
+        optimizer.zero_grad()
+        loss.backward()
+        optimizer.step()
+
+        losses.append(loss.item())
 
 print('done')
