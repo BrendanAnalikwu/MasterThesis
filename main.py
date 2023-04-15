@@ -29,7 +29,7 @@ class HeatNet(torch.nn.Module):
             torch.nn.ReLU(),
             # N x 4x17x17
             torch.nn.ConvTranspose2d(4, 4, 3, 1, 1),
-            torch.nn.ConvTranspose2d(4, 4, 3, 2, 0),
+            torch.nn.ConvTranspose2d(4, 4, 3, 2, 1),
             torch.nn.ReLU(),
             # N x 4x33x33
             torch.nn.ConvTranspose2d(4, 4, 3, 1, 1),
