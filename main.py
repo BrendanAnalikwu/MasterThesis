@@ -45,7 +45,7 @@ class HeatNet(torch.nn.Module):
 def get_dataset(Nx: int, Ny: int, name='latest') -> torch.utils.data.Dataset:
     if name == 'latest':
         name = max([int(s.strip('dataset_8_8_33x33_.gz')) for s in glob.glob('dataset_8_8_33x33_*.gz')])
-    raw_data = np.loadtxt(f'dataset_8_8_33x33_{name}.gz')
+    raw_data = np.loadtxt(f'dataset_8_8_33x33_{name}.gz', dtype=np.float32)
     return torch.utils.data.TensorDataset(torch.tensor(raw_data[:, :Nx + Ny]),
                                           torch.tensor(raw_data[:, Nx + Ny:]).reshape(-1, 33, 33))
 
