@@ -1,6 +1,7 @@
 #ifndef GASCOIGNE_HEATPROBLEM_H
 #define GASCOIGNE_HEATPROBLEM_H
 
+#define _USE_MATH_DEFINES
 #include "problemdescriptorbase.h"
 #include "paramfile.h"
 #include "filescanner.h"
