@@ -6,10 +6,10 @@
 using namespace Gascoigne;
 using namespace std;
 
-int main(int argc, char **argv)
+int main(int argc, char** argv)
 {
     std::string pf_filename = "heat.param";
-    if(argc==2) { pf_filename = "heat" + std::string{argv[1]} + ".param"; }
+    if (argc == 2) { pf_filename = "heat" + std::string{argv[1]} + ".param"; }
 
     ParamFile paramFile(pf_filename);
 
