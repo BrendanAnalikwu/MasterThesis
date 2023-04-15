@@ -62,9 +62,9 @@ loss_func = torch.nn.MSELoss()
 epochs = 10
 losses = []
 for epoch in trange(epochs):
-    for im, _ in loader:
-        res = model(im)
-        loss = loss_func(res, im)
+    for input, label in loader:
+        res = model(input)
+        loss = loss_func(res, label)
 
         optimizer.zero_grad()
         loss.backward()
