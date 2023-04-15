@@ -1,3 +1,6 @@
+import glob
+from typing import Tuple
+
 import torch
 import numpy as np
 
@@ -38,4 +41,14 @@ class HeatNet(torch.nn.Module):
         return self.model(x)
 
 
+def get_dataset(Nx: int, Ny: int, name='latest') -> Tuple[torch.Tensor, torch.Tensor]:
+    if name == 'latest':
+        name = max([int(s.strip('dataset_8_8_33x33_.gz')) for s in glob.glob('dataset_8_8_33x33_*.gz')])
+    raw_data = np.loadtxt(f'dataset_8_8_33x33_{name}.gz')
+    return torch.tensor(raw_data[:, :Nx + Ny]), torch.tensor(raw_data[:, Nx + Ny:]).reshape(-1, 33, 33)
 
+
+data, labels = get_dataset(8, 8)
+print(f'Number of samples in dataset is {len(data)}')
+
+print('done')
