@@ -6,6 +6,14 @@ import numpy as np
 from tqdm import trange
 
 
+class SinActivation(torch.nn.Module):
+    def __init(self):
+        super().__init__()
+
+    def forward(self, x: torch.Tensor):
+        return torch.sin(x)
+
+
 class HeatNet(torch.nn.Module):
     def __init__(self, Nx, Ny, *args, **kwargs):
         super().__init__(*args, **kwargs)
