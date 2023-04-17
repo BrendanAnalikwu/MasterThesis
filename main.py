@@ -72,4 +72,7 @@ for epoch in trange(epochs):
 
         losses.append(loss.item())
 
+test_data, test_labels = get_dataset(Nx, Ny, '230415182814')[:]
+print(f"Test loss: {loss_func(test_labels, model(test_data)).item()}")
+
 print('done')
