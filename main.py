@@ -23,16 +23,16 @@ class HeatNet(torch.nn.Module):
             torch.nn.Linear(Nx + Ny, 32),
             torch.nn.LeakyReLU(.1),
             # N x 32
-            torch.nn.Linear(32, 64),
+            torch.nn.Linear(32, 128),
             torch.nn.LeakyReLU(.1),
             # N x 64
-            torch.nn.Unflatten(-1, (4, 4, 4)),
-            # N x 4x4x4
-            torch.nn.ConvTranspose2d(4, 4, 3, 1, 1),
-            torch.nn.ConvTranspose2d(4, 4, 3, 2, 0),
+            torch.nn.Unflatten(-1, (8, 4, 4)),
+            # N x 8x4x4
+            torch.nn.ConvTranspose2d(8, 8, 3, 1, 1),
+            torch.nn.ConvTranspose2d(8, 8, 3, 2, 0),
             torch.nn.ReLU(),
-            # N x 4x9x9
-            torch.nn.ConvTranspose2d(4, 4, 3, 1, 1),
+            # N x 8x9x9
+            torch.nn.ConvTranspose2d(8, 4, 3, 1, 1),
             torch.nn.ConvTranspose2d(4, 4, 3, 2, 1),
             torch.nn.ReLU(),
             # N x 4x17x17
@@ -43,11 +43,11 @@ class HeatNet(torch.nn.Module):
             torch.nn.ConvTranspose2d(4, 4, 3, 1, 1),
             torch.nn.ConvTranspose2d(4, 1, 3, 1, 1),
             # N x 1x33x33
-            torch.nn.Sigmoid()
+            torch.nn.Tanh()
         )
 
     def forward(self, x: torch.Tensor):
-        return self.model(x)
+        return self.model(x).squeeze()
 
 
 def get_dataset(Nx: int, Ny: int, name='latest') -> torch.utils.data.Dataset:
@@ -67,7 +67,7 @@ model = HeatNet(Nx, Ny)
 optimizer = torch.optim.Adam(model.parameters(), lr=1e-3)
 loss_func = torch.nn.MSELoss()
 
-epochs = 10
+epochs = 20
 losses = []
 for epoch in trange(epochs):
     for input, label in loader:
