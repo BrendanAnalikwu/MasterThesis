@@ -1,0 +1,34 @@
+//Block BoundaryManager
+dirichlet       1 4
+dirichletcomp   4  1  0
+
+//Block Loop
+niter       4
+refiner     global
+runtime_statistics 1
+
+//Block Mesh
+dimension   2
+prerefine   2
+patchdepth  1
+gridname    square.inp
+
+
+//Block RHS
+a   4   1 0.5 0.5 2
+b   2   2 0.5
+
+//Block MultiLevelSolver
+linearsolve mg
+nonlinear_rho 0.05
+
+//Block Solver
+discname       CGQ2
+iterpre	       2
+iterpost       2
+iterexact      4
+matrixtype     block
+ndirect        10
+
+//Block Nix
+

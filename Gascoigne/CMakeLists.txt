@@ -1,8 +1,17 @@
-cmake_minimum_required(VERSION 3.24)
-project(SEAICE)
+cmake_minimum_required(VERSION 3.22)
+project(HeatProblem CXX C)
 
-set(CMAKE_CXX_STANDARD 14)
-SET(GASCOIGNE_DIR   "../../../Thesis/GAS/gascoignelib")
+set(CMAKE_CXX_STANDARD 17)
+SET(GASCOIGNE_DIR   "../../../Thesis/GAS/gascoignelib" CACHE PATH "Path to Gascoigne Library")
+SET(GASCOIGNE_LIB_DIR "${CMAKE_BINARY_DIR}/../../../../Thesis/GAS/gascoignelib/lib"       CACHE PATH "Path to Gascoigne Library")
+SET(CMAKE_RUNTIME_OUTPUT_DIRECTORY "."  CACHE PATH "Path for the executables")
+OPTION(MATRIX_DOUBLE_PRECISION "Matrix in double precision" ON)
+LINK_DIRECTORIES(${GASCOIGNE_LIB_DIR})
+SET(GASCOIGNE_LIBRARY GascoigneStd)
+
+LIST(APPEND GASCOIGNE_LIBRARIES ${GASCOIGNE_LIBRARY})
+LIST(APPEND GASCOIGNE_LIBRARIES ${METIS_LIBRARIES})
+
 SET(GASCOIGNE_INCLUDE_DIRS
         ${GASCOIGNE_DIR}/src/Common
         ${GASCOIGNE_DIR}/src/DofHandler
@@ -17,4 +26,11 @@ SET(GASCOIGNE_INCLUDE_DIRS
         )
 INCLUDE_DIRECTORIES(${GASCOIGNE_INCLUDE_DIRS})
 
-add_executable("SeaIceDynamics" main.cpp)
+SET(GASCOIGNESTEPBYSTEP_CXX_FLAGS
+        "-std=c++11 -pedantic -Wall -Wno-sign-compare -Wno-old-style-cast" CACHE STRING "Configuration flags"
+        )
+SEPARATE_ARGUMENTS(GASCOIGNESTEPBYSTEP_CXX_FLAGS)
+ADD_COMPILE_OPTIONS(${GASCOIGNESTEPBYSTEP_CXX_FLAGS})
+
+LINK_LIBRARIES(${GASCOIGNE_LIBRARIES})
+add_executable("HeatProblem" main.cpp heatproblem.h)
