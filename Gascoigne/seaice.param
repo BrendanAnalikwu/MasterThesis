@@ -12,7 +12,9 @@
 
 //Block Equation
 
-
+starttime       0
+stoptime        5.0
+dt	            0.01
 
 //Block MultiLevelSolver
 
