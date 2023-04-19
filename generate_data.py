@@ -110,9 +110,29 @@ def generate_sample(process_id: int = 0) -> np.ndarray:
     # Run Gascoigne script
     run_Gascoigne(process_id=process_id)
 
+    data = read_vtk(f"Gascoigne/Results{process_id}/solve.00004.vtk")
+
+    # Concatenate a, b and the data
+    return np.concatenate((a, b, data))
+
+
+def read_vtk(filename: str):
+    """
+    Reads a vtk file and returns an ordered flattened array with function values.
+
+    Parameters
+    ----------
+    filename : str
+        The location of the vtk file
+
+    Returns
+    -------
+    res : np.ndarray
+        The ordered flattened array with function values
+    """
     # Collect output
     reader = vtk.vtkUnstructuredGridReader()
-    reader.SetFileName(f"Gascoigne/Results{process_id}/solve.00004.vtk")
+    reader.SetFileName(filename)
     reader.ReadAllScalarsOn()
     reader.Update()
     vtk_data = reader.GetOutput()
@@ -128,8 +148,7 @@ def generate_sample(process_id: int = 0) -> np.ndarray:
     data = data[data[:, 0].argsort()]
     data = data[data[:, 1].argsort(kind='mergesort')]
 
-    # Concatenate a, b and the result
-    return np.concatenate((a, b, data[:, 2]))
+    return data[:, 2]
 
 
 def generate_data(num_samples=1000, process_id=0) -> Callable[[], np.ndarray]:
