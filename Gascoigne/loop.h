@@ -10,8 +10,8 @@ namespace Gascoigne
 class Loop : public StdLoop
 {
 public:
-    void BasicInit(std::string config, const ParamFile &paramFile, const ProblemContainer *PC,
-                   const FunctionalContainer *FC)
+    void BasicInit(const ParamFile& paramFile, const ProblemContainer* PC,
+                   const FunctionalContainer* FC) override
     {
         StdLoop::BasicInit(paramFile, PC, FC);
     }

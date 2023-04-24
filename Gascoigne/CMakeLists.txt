@@ -33,4 +33,5 @@ SEPARATE_ARGUMENTS(GASCOIGNESTEPBYSTEP_CXX_FLAGS)
 ADD_COMPILE_OPTIONS(${GASCOIGNESTEPBYSTEP_CXX_FLAGS})
 
 LINK_LIBRARIES(${GASCOIGNE_LIBRARIES})
-add_executable("HeatProblem" main.cpp heatproblem.h)
+add_executable("HeatProblem" main_heat.cpp heatproblem.h)
+add_executable("SeaIceProblem" main_seaice.cpp seaiceproblem.h)

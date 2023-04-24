@@ -70,6 +70,7 @@ public:
 
 class SeaIceProblem : public ProblemDescriptorBase
 {
+public:
     void BasicInit(const ParamFile &pf) override
     {
         GetParamFile() = pf;
