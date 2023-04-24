@@ -19,20 +19,23 @@ class HeatNet(torch.nn.Module):
     def __init__(self, Nx, Ny, hidden=64, *args, **kwargs):
         super().__init__(*args, **kwargs)
 
-        self.encoder = torch.nn.Sequential(
-            # Input: N x 33x33
+        self.encoder1 = torch.nn.Sequential(
+            # Input: N x 1x33x33
             torch.nn.Conv2d(1, 4, 3, 1, 1),
-            torch.nn.Conv2d(4, 4, 3, 2, 1),
             torch.nn.LeakyReLU(.1),
+            # N x 4x33x33
+            torch.nn.Conv2d(4, 4, 3, 2, 1),
+            torch.nn.LeakyReLU(.1))
+        self.encoder2 = torch.nn.Sequential(
             # N x 4x17x17
             torch.nn.Conv2d(4, 8, 3, 2, 1),
             torch.nn.LeakyReLU(.1),
             # N x 8x9x9
             torch.nn.Conv2d(8, 16, 3, 2, 0),
             torch.nn.LeakyReLU(.1),
-            # N x 8x4x4
+            # N x 16x4x4
             torch.nn.Flatten(1, -1),
-            # N x 128
+            # N x 256
             torch.nn.Linear(256, 128),
             torch.nn.LeakyReLU(.1),
             # N x 32
@@ -40,7 +43,7 @@ class HeatNet(torch.nn.Module):
             torch.nn.LeakyReLU(.1)
         )
 
-        self.decoder = torch.nn.Sequential(
+        self.decoder1 = torch.nn.Sequential(
             # Input: N x (Nx+Ny)
             torch.nn.Linear(hidden, 128),
             torch.nn.LeakyReLU(.1),
@@ -50,26 +53,29 @@ class HeatNet(torch.nn.Module):
             # N x 64
             torch.nn.Unflatten(-1, (16, 4, 4)),
             # N x 8x4x4
-            torch.nn.ConvTranspose2d(16, 8, 3, 1, 1),
-            torch.nn.ConvTranspose2d(8, 8, 3, 2, 0),
+            # torch.nn.ConvTranspose2d(16, 8, 3, 1, 1),
+            torch.nn.ConvTranspose2d(16, 8, 3, 2, 0),
             torch.nn.ReLU(),
             # N x 8x9x9
-            torch.nn.ConvTranspose2d(8, 4, 3, 1, 1),
-            torch.nn.ConvTranspose2d(4, 4, 3, 2, 1),
-            torch.nn.ReLU(),
+            # torch.nn.ConvTranspose2d(8, 4, 3, 1, 1),
+            torch.nn.ConvTranspose2d(8, 4, 3, 2, 1),
+            torch.nn.ReLU())
+        self.decoder2 = torch.nn.Sequential(
             # N x 4x17x17
-            torch.nn.ConvTranspose2d(4, 4, 3, 1, 1),
+            # torch.nn.ConvTranspose2d(4, 4, 3, 1, 1),
             torch.nn.ConvTranspose2d(4, 4, 3, 2, 1),
             torch.nn.ReLU(),
             # N x 4x33x33
-            torch.nn.ConvTranspose2d(4, 4, 3, 1, 1),
+            # torch.nn.ConvTranspose2d(4, 4, 3, 1, 1),
             torch.nn.ConvTranspose2d(4, 1, 3, 1, 1),
             # N x 1x33x33
             torch.nn.Tanh()
         )
 
     def forward(self, x: torch.Tensor):
-        return self.decoder(self.encoder(x)).squeeze()
+        x_skip = self.encoder1(x)
+        output = self.decoder2(x_skip + self.decoder1(self.encoder2(x_skip)))
+        return output.squeeze()
 
 
 def get_dataset(Nx: int, Ny: int, name='latest') -> torch.utils.data.Dataset:
@@ -121,6 +127,8 @@ plt.imshow((res[j] - label[j]).detach())
 
 plt.show()
 test_data, test_labels = get_dataset(Nx, Ny, '230415182814')[:]
-print(f"Test loss: {loss_func(test_labels, model(test_data)).item()}")
+test_rhs = (torch.tensordot(test_data[:, :Nx], x_sin_list, dims=1)
+            * torch.tensordot(test_data[:, Nx:], y_sin_list, dims=1)).unsqueeze(1)
+print(f"Test loss: {loss_func(test_labels, model(test_rhs)).item()}")
 
 print('done')
