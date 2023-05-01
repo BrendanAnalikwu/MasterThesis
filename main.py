@@ -1,4 +1,5 @@
 import glob
+from math import ceil
 from typing import Tuple
 import torch
 import torch.utils.data
@@ -101,6 +102,12 @@ y_grid, x_grid = np.meshgrid(np.linspace(0, 1, 33), np.linspace(0, 1, 33), index
 x_sin_list = torch.tensor(np.array([np.sin(np.pi * (i + 1) * x_grid) for i in range(Nx)]), dtype=torch.float32)
 y_sin_list = torch.tensor(np.array([np.sin(np.pi * (i + 1) * y_grid) for i in range(Nx)]), dtype=torch.float32)
 
+test_losses = []
+test_data, test_labels = get_dataset(Nx, Ny, '230415182814')[:]
+test_rhs = (torch.tensordot(test_data[:, :Nx], x_sin_list, dims=1)
+            * torch.tensordot(test_data[:, Nx:], y_sin_list, dims=1)).unsqueeze(1)
+test_losses.append(loss_func(model(test_rhs), test_labels).item())
+
 for epoch in trange(epochs):
     for coefficients, label in loader:
         rhs = (torch.tensordot(coefficients[:, :Nx], x_sin_list, dims=1) * torch.tensordot(coefficients[:, Nx:],
@@ -115,20 +122,51 @@ for epoch in trange(epochs):
 
         losses.append(loss.item())
 
-j = 2
-plt.subplot(2, 2, 1)
-plt.imshow(rhs[j].squeeze().detach())
-plt.subplot(2, 2, 2)
-plt.imshow(label[j].squeeze().detach())
-plt.subplot(2, 2, 3)
-plt.imshow(res[j].squeeze().detach())
-plt.subplot(2, 2, 4)
-plt.imshow((res[j] - label[j]).detach())
+    test_losses.append(loss_func(model(test_rhs), test_labels).item())
 
-plt.show()
-test_data, test_labels = get_dataset(Nx, Ny, '230415182814')[:]
-test_rhs = (torch.tensordot(test_data[:, :Nx], x_sin_list, dims=1)
-            * torch.tensordot(test_data[:, Nx:], y_sin_list, dims=1)).unsqueeze(1)
+
+def plot_sample(num_sol: torch.Tensor, net_res: torch.Tensor, righths: torch.Tensor, j: int = 0):
+    plt.figure()
+    plt.subplot(2, 2, 1)
+    plt.imshow(num_sol[j].squeeze().detach())
+    plt.title('Numerical solution')
+    plt.xticks([])
+    plt.yticks([])
+    plt.subplot(2, 2, 2)
+    plt.imshow(net_res[j].squeeze().detach())
+    plt.title('Network result')
+    plt.colorbar()
+    plt.xticks([])
+    plt.yticks([])
+    plt.subplot(2, 2, 3)
+    plt.imshow(righths[j].squeeze().detach())
+    plt.title('RHS')
+    plt.colorbar()
+    plt.xticks([])
+    plt.yticks([])
+    plt.subplot(2, 2, 4)
+    plt.imshow((net_res[j] - num_sol[j]).detach())
+    plt.title('Error')
+    plt.colorbar()
+    plt.xticks([])
+    plt.yticks([])
+    plt.tight_layout()
+    plt.show()
+
+
+def plot_losses(train: list[float], test: list[float], batch_size: int = 32, train_size: int = 30000):
+    plt.figure()
+    plt.semilogy(train)
+    plt.semilogy([i * ceil(train_size / batch_size) for i in range(len(test))], test)
+    plt.title("Loss (MSE)")
+    plt.legend(['Training data', 'Test data'])
+    plt.tight_layout()
+    plt.show()
+
+
+plot_sample(label, res, rhs, 0)
+plot_losses(losses, test_losses)
+
 print(f"Test loss: {loss_func(test_labels, model(test_rhs)).item()}")
 
 print('done')
