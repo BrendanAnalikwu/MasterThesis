@@ -1,133 +1,54 @@
 import torch
 import torch.utils.data
 from tqdm import trange
-from loss import loss_func
+from loss import loss_func, vector, form
+from surrogate_net import SurrogateNet
+import matplotlib.pyplot as plt
 
 
-class SurrogateNet(torch.nn.Module):
-    def __init__(self, *args, **kwargs):
-        super().__init__(*args, **kwargs)
+def advect(v: torch.Tensor, H_old: torch.tensor, dt: float, dx: float):
+    """
+    Perform advection step on B-grid.
 
-        self.layer1 = torch.nn.Conv2d(4, 4, 2, 1, 0)
-        self.layer2 = torch.nn.Sequential(
-            # 128
-            torch.nn.Conv2d(6, 8, 3, 1, 0),
-            torch.nn.LeakyReLU(.1),
-            # 126
-            torch.nn.Conv2d(8, 8, 3, 1, 0),
-            torch.nn.LeakyReLU(.1),
-            # 124
-        )
-        self.layer3 = torch.nn.Sequential(
-            torch.nn.MaxPool2d(2, 2),
-            # 62
-            torch.nn.Conv2d(8, 16, 3, 1, 0),
-            torch.nn.LeakyReLU(.1),
-            # 60
-            torch.nn.Conv2d(16, 16, 3, 1, 0),
-            torch.nn.LeakyReLU(.1),
-            # 58
-        )
-        self.layer4 = torch.nn.Sequential(
-            torch.nn.MaxPool2d(2, 2),
-            # 29
-            torch.nn.Conv2d(16, 32, 3, 1, 0),
-            torch.nn.LeakyReLU(.1),
-            # 27
-            torch.nn.Conv2d(32, 32, 3, 2, 0),
-            torch.nn.LeakyReLU(.1),
-            # 13
-            torch.nn.Conv2d(32, 32, 3, 1, 1),
-            torch.nn.LeakyReLU(.1),
-            # 13
-            torch.nn.Conv2d(32, 32, 3, 2, 0),
-            torch.nn.LeakyReLU(.1),
-            # 6
-            torch.nn.Flatten(1, -1),
-            # 2304
-            torch.nn.Linear(1152, 512),
-            torch.nn.LeakyReLU(.1),
-            torch.nn.Linear(512, 512),
-            torch.nn.LeakyReLU(.1),
-            torch.nn.Linear(512, 1152),
-            torch.nn.Unflatten(-1, (32, 6, 6)),
-            # 6
-            torch.nn.ConvTranspose2d(32, 32, 3, 2, 0),
-            torch.nn.ReLU(),
-            # 13
-            torch.nn.Conv2d(32, 32, 3, 1, 1),
-            torch.nn.ReLU(),
-            torch.nn.ConvTranspose2d(32, 32, 3, 2, 0),
-            torch.nn.ReLU(),
-            # 27
-            torch.nn.ConvTranspose2d(32, 16, 3, 1, 0),
-            torch.nn.LeakyReLU(.1),
-            # 29
-            torch.nn.ConvTranspose2d(16, 16, 2, 2, 0),
-            torch.nn.LeakyReLU(.1)
-            # 58
-        )
-        self.layer5 = torch.nn.Sequential(
-            # 58
-            torch.nn.ConvTranspose2d(32, 16, 3, 1, 0),
-            torch.nn.LeakyReLU(.1),
-            # 60
-            torch.nn.ConvTranspose2d(16, 16, 3, 1, 0),
-            torch.nn.LeakyReLU(.1),
-            # 62
-            torch.nn.ConvTranspose2d(16, 8, 2, 2, 0),
-            torch.nn.LeakyReLU(.1),
-            # 124
-        )
-        self.layer6 = torch.nn.Sequential(
-            # 124
-            torch.nn.ConvTranspose2d(16, 8, 3, 1, 0),
-            torch.nn.LeakyReLU(.1),
-            # 126
-            torch.nn.ConvTranspose2d(8, 8, 3, 1, 0),
-            torch.nn.LeakyReLU(.1)
-            # 128
-        )
-        self.layer7 = torch.nn.Sequential(torch.nn.ConvTranspose2d(8, 4, 2, 1, 0),
-                                          torch.nn.Tanhshrink(),
-                                          torch.nn.ConvTranspose2d(4, 2, 3, 1, 1),
-                                          torch.nn.Tanh())
+    Parameters
+    ----------
+    v : torch.Tensor
+        Ice velocity tensor of shape (N, 2, H+1, W+1)
+    H_old : torch.Tensor
+        Quantity to advect as tensor with shape (N, H, W)
+    dt : float
+        Time step
+    dx : float
+        Grid spacing
 
-    def forward(self, v, H, A, v_a):
-        x = self.layer1(torch.cat((v, v_a), 1))
-        x = torch.cat((x, H[:, None, ...], A[:, None, ...]), 1)
-        x1 = self.layer2(x)  # 124
-        x2 = self.layer3(x1)  # 58
-        x3 = self.layer4(x2)
-        x4 = self.layer5(torch.cat((x3, x2), 1))
-        x5 = self.layer6(torch.cat((x4, x1), 1))
-        dv = self.layer7(x5)
+    Returns
+    -------
+    torch.Tensor
+        Advected quantity
 
-        return v + .1 * dv  # , torch.nn.functional.relu(x5[:, 2, :, :]), torch.nn.functional.sigmoid(x5[:, 3, :, :])
+    """
 
-
-def advect(v: torch.Tensor, H_old: torch.tensor):
     dH = torch.zeros_like(H_old)
 
     # x-direction
     v_x = (v[:, 0, 1:, 1:-1] + v[:, 0, :-1, 1:-1]) / 2.
-    dH[:, :, 1:] += torch.nn.functional.relu(v_x) * H_old[:, :, :-1]
-    dH[:, :, :-1] -= torch.nn.functional.relu(v_x) * H_old[:, :, :-1]
-    dH[:, :, :-1] += torch.nn.functional.relu(-1 * v_x) * H_old[:, :, 1:]
-    dH[:, :, 1:] -= torch.nn.functional.relu(-1 * v_x) * H_old[:, :, 1:]
+    dH[:, :, 1:] += torch.nn.functional.relu(v_x) * H_old[:, :, :-1] * dt / dx
+    dH[:, :, :-1] -= torch.nn.functional.relu(v_x) * H_old[:, :, :-1] * dt / dx
+    dH[:, :, :-1] += torch.nn.functional.relu(-1 * v_x) * H_old[:, :, 1:] * dt / dx
+    dH[:, :, 1:] -= torch.nn.functional.relu(-1 * v_x) * H_old[:, :, 1:] * dt / dx
 
     # y-direction
     v_y = (v[:, 0, 1:-1, 1:] + v[:, 0, 1:-1, :-1]) / 2.
-    dH[:, 1:, :] += torch.nn.functional.relu(-1 * v_y) * H_old[:, :-1, :]
-    dH[:, :-1, :] -= torch.nn.functional.relu(-1 * v_y) * H_old[:, :-1, :]
-    dH[:, :-1, :] += torch.nn.functional.relu(v_y) * H_old[:, 1:, :]
-    dH[:, 1:, :] -= torch.nn.functional.relu(v_y) * H_old[:, 1:, :]
+    dH[:, 1:, :] += torch.nn.functional.relu(-1 * v_y) * H_old[:, :-1, :] * dt / dx
+    dH[:, :-1, :] -= torch.nn.functional.relu(-1 * v_y) * H_old[:, :-1, :] * dt / dx
+    dH[:, :-1, :] += torch.nn.functional.relu(v_y) * H_old[:, 1:, :] * dt / dx
+    dH[:, 1:, :] -= torch.nn.functional.relu(v_y) * H_old[:, 1:, :] * dt / dx
 
     return H_old + dH
 
 
 # Constants
-L = 1e6
+L = 1e4
 T = 1e3
 G = 1.
 C_o = 1026 * 5.5e-3 * L / (900 * G)
@@ -146,7 +67,7 @@ x_h, y_h = torch.meshgrid(torch.linspace(0, 1 - 1 / 128., 128), torch.linspace(0
 H0 = .3 * torch.ones(N, 128, 128) + .005 * (torch.sin(x_h * 256) + torch.sin(y_h * 256))
 A0 = torch.ones(N, 128, 128)
 v0 = torch.zeros(N, 2, 129, 129)
-v0[:, :, 1:-1, 1:-1] = .01 * torch.ones(N, 2, 127, 127)
+v0[:, :, 1:-1, 1:-1] = .001 * torch.ones(N, 2, 127, 127)
 v0[:2, 0, :64, :] = -v0[:2, 0, :64, :]
 v0[2:, 0, :, :64] = -v0[2:, 0, :, :64]
 
@@ -159,9 +80,9 @@ v_a = torch.ones_like(v0) * (20 * T / L)
 v_a[::2, 0, :64, :] = -v_a[::2, 0, :64, :]
 losses = []
 
-H = advect(v0, H0)
+H = advect(v0, H0, dt, dx)
 H.clamp_(0., None)
-A = advect(v0, A0)
+A = advect(v0, A0, dt, dx)
 A.clamp_(0., 1.)
 
 for i in trange(10000):
@@ -171,7 +92,10 @@ for i in trange(10000):
     optimizer.zero_grad()
     loss.backward()
     torch.nn.utils.clip_grad_norm_(model.parameters(), 1)
-    if i == 1000:
+    if i == 500:
+        for g in optimizer.param_groups:
+            g['lr'] = 1e-4
+    if i == 3000:
         for g in optimizer.param_groups:
             g['lr'] = 1e-5
     optimizer.step()
