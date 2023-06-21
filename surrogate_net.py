@@ -42,47 +42,47 @@ class SurrogateNet(torch.nn.Module):
             # 6
             torch.nn.Flatten(1, -1),
             # 2304
-            torch.nn.Linear(1152, 512),
+            torch.nn.Linear(1152, 128),
             torch.nn.LeakyReLU(.1),
-            torch.nn.Linear(512, 512),
+            torch.nn.Linear(128, 128),
             torch.nn.LeakyReLU(.1),
-            torch.nn.Linear(512, 1152),
+            torch.nn.Linear(128, 1152),
             torch.nn.Unflatten(-1, (32, 6, 6)),
             # 6
             torch.nn.ConvTranspose2d(32, 32, 3, 2, 0),
-            torch.nn.ReLU(),
+            torch.nn.LeakyReLU(.01),
             # 13
             torch.nn.Conv2d(32, 32, 3, 1, 1),
-            torch.nn.ReLU(),
+            torch.nn.LeakyReLU(.01),
             torch.nn.ConvTranspose2d(32, 32, 3, 2, 0),
-            torch.nn.ReLU(),
+            torch.nn.LeakyReLU(.01),
             # 27
             torch.nn.ConvTranspose2d(32, 16, 3, 1, 0),
-            torch.nn.LeakyReLU(.1),
+            torch.nn.LeakyReLU(.01),
             # 29
             torch.nn.ConvTranspose2d(16, 16, 2, 2, 0),
-            torch.nn.LeakyReLU(.1)
+            torch.nn.LeakyReLU(.01)
             # 58
         )
         self.layer5 = torch.nn.Sequential(
             # 58
             torch.nn.ConvTranspose2d(32, 16, 3, 1, 0),
-            torch.nn.LeakyReLU(.1),
+            torch.nn.LeakyReLU(.01),
             # 60
             torch.nn.ConvTranspose2d(16, 16, 3, 1, 0),
-            torch.nn.LeakyReLU(.1),
+            torch.nn.LeakyReLU(.01),
             # 62
             torch.nn.ConvTranspose2d(16, 8, 2, 2, 0),
-            torch.nn.LeakyReLU(.1),
+            torch.nn.LeakyReLU(.01),
             # 124
         )
         self.layer6 = torch.nn.Sequential(
             # 124
             torch.nn.ConvTranspose2d(16, 8, 3, 1, 0),
-            torch.nn.LeakyReLU(.1),
+            torch.nn.LeakyReLU(.01),
             # 126
             torch.nn.ConvTranspose2d(8, 8, 3, 1, 0),
-            torch.nn.LeakyReLU(.1)
+            torch.nn.LeakyReLU(.01)
             # 128
         )
         self.layer7 = torch.nn.Sequential(torch.nn.ConvTranspose2d(8, 4, 2, 1, 0),
@@ -100,4 +100,4 @@ class SurrogateNet(torch.nn.Module):
         x5 = self.layer6(torch.cat((x4, x1), 1))
         dv = self.layer7(x5)
 
-        return v + .1 * dv  # , torch.nn.functional.relu(x5[:, 2, :, :]), torch.nn.functional.sigmoid(x5[:, 3, :, :])
+        return v + dv  # , torch.nn.functional.relu(x5[:, 2, :, :]), torch.nn.functional.sigmoid(x5[:, 3, :, :])
