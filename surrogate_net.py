@@ -5,99 +5,179 @@ class SurrogateNet(torch.nn.Module):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
 
-        self.layer1 = torch.nn.Conv2d(4, 4, 2, 1, 0)
+        self.layer1 = torch.nn.Conv2d(4, 6, 2, 1, 0, bias=False)
         self.layer2 = torch.nn.Sequential(
+            torch.nn.BatchNorm2d(8),
+            torch.nn.GELU(),
+            # 256
+            torch.nn.Conv2d(8, 8, 4, 2, 1, padding_mode='replicate'),
+            torch.nn.BatchNorm2d(8),
+            torch.nn.GELU(),
             # 128
-            torch.nn.Conv2d(6, 8, 3, 1, 0),
-            torch.nn.LeakyReLU(.1),
-            # 126
-            torch.nn.Conv2d(8, 8, 3, 1, 0),
-            torch.nn.LeakyReLU(.1),
-            # 124
+            torch.nn.Conv2d(8, 16, 3, 1, 1, padding_mode='replicate'),
+            torch.nn.BatchNorm2d(16),
+            torch.nn.GELU(),
+            # 128
+            torch.nn.Conv2d(16, 16, 3, 1, 1, padding_mode='replicate'),
+            torch.nn.BatchNorm2d(16),
+            torch.nn.GELU(),
+            # 128
         )
         self.layer3 = torch.nn.Sequential(
-            torch.nn.MaxPool2d(2, 2),
-            # 62
-            torch.nn.Conv2d(8, 16, 3, 1, 0),
-            torch.nn.LeakyReLU(.1),
-            # 60
-            torch.nn.Conv2d(16, 16, 3, 1, 0),
-            torch.nn.LeakyReLU(.1),
-            # 58
-        )
-        self.layer4 = torch.nn.Sequential(
-            torch.nn.MaxPool2d(2, 2),
-            # 29
-            torch.nn.Conv2d(16, 32, 3, 1, 0),
-            torch.nn.LeakyReLU(.1),
-            # 27
-            torch.nn.Conv2d(32, 32, 3, 2, 0),
-            torch.nn.LeakyReLU(.1),
-            # 13
-            torch.nn.Conv2d(32, 32, 3, 1, 1),
-            torch.nn.LeakyReLU(.1),
-            # 13
-            torch.nn.Conv2d(32, 32, 3, 2, 0),
-            torch.nn.LeakyReLU(.1),
-            # 6
-            torch.nn.Flatten(1, -1),
-            # 2304
-            torch.nn.Linear(1152, 128),
-            torch.nn.LeakyReLU(.1),
-            torch.nn.Linear(128, 128),
-            torch.nn.LeakyReLU(.1),
-            torch.nn.Linear(128, 1152),
-            torch.nn.Unflatten(-1, (32, 6, 6)),
-            # 6
-            torch.nn.ConvTranspose2d(32, 32, 3, 2, 0),
-            torch.nn.LeakyReLU(.01),
-            # 13
-            torch.nn.Conv2d(32, 32, 3, 1, 1),
-            torch.nn.LeakyReLU(.01),
-            torch.nn.ConvTranspose2d(32, 32, 3, 2, 0),
-            torch.nn.LeakyReLU(.01),
-            # 27
-            torch.nn.ConvTranspose2d(32, 16, 3, 1, 0),
-            torch.nn.LeakyReLU(.01),
-            # 29
-            torch.nn.ConvTranspose2d(16, 16, 2, 2, 0),
-            torch.nn.LeakyReLU(.01)
-            # 58
-        )
-        self.layer5 = torch.nn.Sequential(
-            # 58
-            torch.nn.ConvTranspose2d(32, 16, 3, 1, 0),
-            torch.nn.LeakyReLU(.01),
-            # 60
-            torch.nn.ConvTranspose2d(16, 16, 3, 1, 0),
-            torch.nn.LeakyReLU(.01),
-            # 62
-            torch.nn.ConvTranspose2d(16, 8, 2, 2, 0),
-            torch.nn.LeakyReLU(.01),
-            # 124
-        )
-        self.layer6 = torch.nn.Sequential(
-            # 124
-            torch.nn.ConvTranspose2d(16, 8, 3, 1, 0),
-            torch.nn.LeakyReLU(.01),
-            # 126
-            torch.nn.ConvTranspose2d(8, 8, 3, 1, 0),
-            torch.nn.LeakyReLU(.01)
+            # 256
+            torch.nn.Conv2d(16, 16, 4, 2, 1, padding_mode='replicate'),
+            torch.nn.BatchNorm2d(16),
+            torch.nn.GELU(),
+            # 128
+            torch.nn.Conv2d(16, 32, 3, 1, 1, padding_mode='replicate'),
+            torch.nn.BatchNorm2d(32),
+            torch.nn.GELU(),
+            # 128
+            torch.nn.Conv2d(32, 32, 3, 1, 1, padding_mode='replicate'),
+            torch.nn.BatchNorm2d(32),
+            torch.nn.GELU(),
             # 128
         )
-        self.layer7 = torch.nn.Sequential(torch.nn.ConvTranspose2d(8, 4, 2, 1, 0),
-                                          torch.nn.LeakyReLU(.1),
-                                          torch.nn.ConvTranspose2d(4, 2, 3, 1, 1),
-                                          torch.nn.Tanh())
+        self.layer4 = torch.nn.Sequential(
+            # 128
+            torch.nn.Conv2d(32, 32, 4, 2, 1, padding_mode='replicate'),
+            torch.nn.BatchNorm2d(32),
+            torch.nn.GELU(),
+            # 64
+            torch.nn.Conv2d(32, 64, 3, 1, 1, padding_mode='replicate'),
+            torch.nn.BatchNorm2d(64),
+            torch.nn.GELU(),
+            # 64
+            torch.nn.Conv2d(64, 64, 3, 1, 1, padding_mode='replicate'),
+            torch.nn.BatchNorm2d(64),
+            torch.nn.GELU(),
+            # 64
+        )
+        self.layer5 = torch.nn.Sequential(
+            # 64
+            torch.nn.Conv2d(64, 64, 4, 2, 1, padding_mode='replicate'),
+            torch.nn.BatchNorm2d(64),
+            torch.nn.GELU(),
+            # 32
+            torch.nn.Conv2d(64, 128, 3, 1, 1, padding_mode='replicate'),
+            torch.nn.BatchNorm2d(128),
+            torch.nn.GELU(),
+            # 32
+            torch.nn.Conv2d(128, 128, 3, 1, 1, padding_mode='replicate'),
+            torch.nn.BatchNorm2d(128),
+            torch.nn.GELU(),
+            # 32
+        )
+        self.layer6 = torch.nn.Sequential(
+            # 16
+            torch.nn.Conv2d(128, 256, 4, 2, 0),
+            torch.nn.BatchNorm2d(256),
+            torch.nn.GELU(),
+            # 7
+            torch.nn.Conv2d(256, 256, 3, 1, 0),
+            torch.nn.BatchNorm2d(256),
+            torch.nn.GELU(),
+            # 5
+            torch.nn.Upsample((7, 7), mode='bilinear'),
+            torch.nn.Conv2d(256, 256, 3, 1, 1, padding_mode='replicate'),
+            torch.nn.BatchNorm2d(256),
+            torch.nn.GELU(),
+            # 256x7
+            torch.nn.Upsample((16, 16), mode='bilinear'),
+            torch.nn.Conv2d(256, 128, 3, 1, 1, padding_mode='replicate'),
+            torch.nn.BatchNorm2d(128),
+            torch.nn.GELU(),
+            # 128x16
+        )
+        self.layer7 = torch.nn.Sequential(
+            # 32
+            torch.nn.Conv2d(128, 128, 3, 1, 1, padding_mode='replicate'),
+            torch.nn.BatchNorm2d(128),
+            torch.nn.GELU(),
+            # 32
+            torch.nn.Conv2d(128, 128, 3, 1, 1, padding_mode='replicate'),
+            torch.nn.BatchNorm2d(128),
+            torch.nn.GELU(),
+            # 128x32
+            # torch.nn.PixelShuffle(2),
+            torch.nn.Upsample((32, 32), mode='bilinear'),
+            torch.nn.Conv2d(128, 64, 3, 1, 1, padding_mode='replicate'),
+            torch.nn.BatchNorm2d(64),
+            torch.nn.GELU(),
+            # 32x64
+        )
+        self.layer8 = torch.nn.Sequential(
+            # 64
+            torch.nn.Conv2d(64, 64, 3, 1, 1, padding_mode='replicate'),
+            torch.nn.BatchNorm2d(64),
+            torch.nn.GELU(),
+            # 64
+            torch.nn.Conv2d(64, 64, 3, 1, 1, padding_mode='replicate'),
+            torch.nn.BatchNorm2d(64),
+            torch.nn.GELU(),
+            # 64
+            # torch.nn.PixelShuffle(2),
+            torch.nn.Upsample((64, 64), mode='bilinear'),
+            torch.nn.Conv2d(64, 32, 3, 1, 1, padding_mode='replicate'),
+            torch.nn.BatchNorm2d(32),
+            torch.nn.GELU(),
+            # 128
+        )
+        self.layer9 = torch.nn.Sequential(
+            # 16
+            torch.nn.Conv2d(32, 32, 3, 1, 1, padding_mode='replicate'),
+            torch.nn.BatchNorm2d(32),
+            torch.nn.GELU(),
+            # 16
+            torch.nn.Conv2d(32, 32, 3, 1, 1, padding_mode='replicate'),
+            torch.nn.BatchNorm2d(32),
+            torch.nn.GELU(),
+            # 256x16
+            # torch.nn.PixelShuffle(2),
+            torch.nn.Upsample((128, 128), mode='bilinear'),
+            torch.nn.Conv2d(32, 32, 3, 1, 1, padding_mode='replicate'),
+            torch.nn.BatchNorm2d(32),
+            torch.nn.GELU(),
+            # 32
+        )
+        self.layer10 = torch.nn.Sequential(
+            # 128
+            torch.nn.Conv2d(32, 32, 3, 1, 1, padding_mode='replicate'),
+            torch.nn.BatchNorm2d(32),
+            torch.nn.GELU(),
+            # 128
+            torch.nn.Conv2d(32, 32, 3, 1, 1, padding_mode='replicate'),
+            torch.nn.BatchNorm2d(32),
+            torch.nn.GELU(),
+            # 128
+            torch.nn.Upsample((257, 257), mode='bilinear'),
+            torch.nn.Conv2d(32, 16, 3, 1, 1, padding_mode='replicate'),
+            torch.nn.BatchNorm2d(16),
+            torch.nn.GELU(),
+            # 257
+            torch.nn.Conv2d(16, 8, 3, 1, 1, padding_mode='replicate'),
+            torch.nn.BatchNorm2d(8),
+            torch.nn.GELU(),
+            # 257
+            torch.nn.Conv2d(8, 2, 3, 1, 1, padding_mode='replicate'),
+            torch.nn.Tanh()
+            # 257
+        )
+
+        torch.nn.init.uniform_(self.layer10[-2].weight, 0, .01)
 
     def forward(self, v, H, A, v_a):
-        x = self.layer1(torch.cat((v, v_a), 1))
-        x = torch.cat((x, H[:, None, ...], A[:, None, ...]), 1)
-        x1 = self.layer2(x)  # 124
-        x2 = self.layer3(x1)  # 58
-        x3 = self.layer4(x2)
-        x4 = self.layer5(torch.cat((x3, x2), 1))
-        x5 = self.layer6(torch.cat((x4, x1), 1))
-        dv = self.layer7(x5)
+        x1 = self.layer1(torch.cat((v, v_a), 1))
+        # x1 = torch.cat((x, H[:, None, ...], A[:, None, ...]), 1)
+        # x1 = self.layer1(v)
+        x2 = self.layer2(torch.cat((x1, H[:, None, ...], A[:, None, ...]), 1))
+        x3 = self.layer3(x2)
+        x4 = self.layer4(x3)
+        x5 = self.layer5(x4)
+        x6 = self.layer6(x5)
+        x7 = self.layer7(x6 + x5)  # + x5)
+        x8 = self.layer8(x7 + x4)  # + x4)
+        x9 = self.layer9(x8 + x3)  # + x3)
+        dv = self.layer10(x9)  # + x2)
 
-        return v + dv  # , torch.nn.functional.relu(x5[:, 2, :, :]), torch.nn.functional.sigmoid(x5[:, 3, :, :])
+        return dv

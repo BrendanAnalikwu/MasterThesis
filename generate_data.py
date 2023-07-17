@@ -116,7 +116,7 @@ def generate_sample(process_id: int = 0) -> np.ndarray:
     return np.concatenate((a, b, data))
 
 
-def read_vtk(filename: str):
+def read_vtk(filename: str, point_data: bool = True, variable_name: str = ''):
     """
     Reads a vtk file and returns an ordered flattened array with function values.
 
@@ -124,6 +124,10 @@ def read_vtk(filename: str):
     ----------
     filename : str
         The location of the vtk file
+    point_data : bool
+        Whether the data to read lies in the cells or points
+    variable_name : str
+        Name of the variable to read from vtk file
 
     Returns
     -------
@@ -139,11 +143,15 @@ def read_vtk(filename: str):
 
     # Get coordinates from vtk file
     # This gives a n*3 array, where the last variable is for time. Since this is steady-state, we can override this col
-    data = VN.vtk_to_numpy(vtk_data.GetPoints().GetData())
+
 
     # Get solution at each point
-    data[:, 2] = VN.vtk_to_numpy(vtk_data.GetPointData().GetScalars())
-
+    if point_data:
+        data = VN.vtk_to_numpy(vtk_data.GetPoints().GetData())
+        data[:, 2] = VN.vtk_to_numpy(vtk_data.GetPointData().GetScalars(variable_name))
+    else:
+        data = VN.vtk_to_numpy(vtk_data.GetPoints().GetData())[VN.vtk_to_numpy(vtk_data.GetCells().GetData())[1::5]]
+        data[:, 2] = vtk_data.GetCellData().GetScalars(variable_name)
     # Reorder data
     data = data[data[:, 0].argsort()]
     data = data[data[:, 1].argsort(kind='mergesort')]
@@ -201,12 +209,12 @@ async def main():
     # Concatenate the datasets from each thread and return
     return np.concatenate(result)
 
+if __name__ == '__main__':
+    start = time.time()
+    dataset = asyncio.run(main())
 
-start = time.time()
-dataset = asyncio.run(main())
+    # Save dataset to as a compressed .gz file
+    np.savetxt(f"dataset_{Nx}_{Ny}_{image_dim}x{image_dim}_{datetime.datetime.now().strftime('%y%m%d%H%M%S')}.gz", dataset)
 
-# Save dataset to as a compressed .gz file
-np.savetxt(f"dataset_{Nx}_{Ny}_{image_dim}x{image_dim}_{datetime.datetime.now().strftime('%y%m%d%H%M%S')}.gz", dataset)
-
-print(time.time() - start)
-print('done')
+    print(time.time() - start)
+    print('done')
