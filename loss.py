@@ -98,6 +98,24 @@ def internal_stress(v: torch.Tensor, H: torch.Tensor, A: torch.Tensor, dx: float
     return s_xx, s_yy, s_xy
 
 
+integration_filter = torch.tensor([[2, 4], [1, 2]], dtype=torch.float32)[None, :, :]
+integration_filter = torch.stack((integration_filter, integration_filter))
+
+
+def integration_B_grid(vertex: torch.Tensor, cell: torch.Tensor, dx: float):
+    filter = integration_filter.to(vertex.device)
+
+    res = torch.mul(torch.nn.functional.conv2d(vertex[:, :, 1:, :-1], filter, groups=2), cell[:, None, 1:, :-1])
+    res += torch.mul(torch.nn.functional.conv2d(vertex[:, :, 1:, 1:], torch.flip(filter, [3]), groups=2),
+                     cell[:, None, 1:, 1:])
+    res += torch.mul(torch.nn.functional.conv2d(vertex[:, :, :-1, :-1], torch.flip(filter, [2]), groups=2),
+                     cell[:, None, :-1, :-1])
+    res += torch.mul(torch.nn.functional.conv2d(vertex[:, :, :-1, 1:], torch.flip(filter, [2, 3]), groups=2),
+                     cell[:, None, :-1, 1:])
+
+    return res * dx ** 2 / 36
+
+
 def form(v: torch.Tensor, H: torch.Tensor, A: torch.Tensor, dx: float, C: float, e_2: float, dt: float, T: float,
          f_c: float, C_r: float) -> torch.Tensor:
     """
@@ -135,19 +153,8 @@ def form(v: torch.Tensor, H: torch.Tensor, A: torch.Tensor, dx: float, C: float,
     # Stress computation
     s_xx, s_yy, s_xy = internal_stress(v, H, A, dx, C, e_2)
 
-    # Set convolutional filters for easy computation
-    # v_filter = dx ** 2 / 36 * torch.tensor([[1, 4, 1], [4, 16, 4], [1, 4, 1]], dtype=torch.float32)
-    v_filter = dx ** 2 / 36 * torch.tensor([[2, 4], [1, 2]], dtype=torch.float32, device=H.device)[None, :, :]
-    v_filter = torch.stack((v_filter, v_filter))
-
     # Compute first term in LHS (H v / dt, ϕ)
-    mat = (torch.mul(torch.nn.functional.conv2d(v[:, :, 1:, :-1], v_filter, groups=2), H[:, None, 1:, :-1])
-           + torch.mul(torch.nn.functional.conv2d(v[:, :, 1:, 1:], torch.flip(v_filter, [3]), groups=2),
-                       H[:, None, 1:, 1:])
-           + torch.mul(torch.nn.functional.conv2d(v[:, :, :-1, :-1], torch.flip(v_filter, [2]), groups=2),
-                       H[:, None, :-1, :-1])
-           + torch.mul(torch.nn.functional.conv2d(v[:, :, :-1, 1:], torch.flip(v_filter, [2, 3]), groups=2),
-                       H[:, None, :-1, 1:])) / dt
+    mat = integration_B_grid(v, H, dx) / dt
 
     # Compute stress term in LHS (C_r σ, ∇ϕ)
     s_filter = dx ** 2 / 3 * torch.tensor([[1, 1], [1, 1]], dtype=torch.float32, device=H.device)[None, None, :, :]
@@ -184,30 +191,13 @@ def vector(H: torch.Tensor, A: torch.Tensor, v_old: torch.Tensor, v_a: torch.Ten
     F : torch.Tensor
         Right hand side vector with shape (N, 2, H, W)
     """
-    v_filter = dx ** 2 / 36 * torch.tensor([[2, 4], [1, 2]], dtype=torch.float32, device=H.device)[None, :, :]
-    v_filter = torch.stack((v_filter, v_filter))
 
     # Compute first term in RHS (H v_old / dt, ϕ)
-    F = (torch.mul(torch.nn.functional.conv2d(v_old[:, :, 1:, :-1], v_filter, groups=2), H[:, None, 1:, :-1])
-         + torch.mul(torch.nn.functional.conv2d(v_old[:, :, 1:, 1:], torch.flip(v_filter, [3]), groups=2),
-                     H[:, None, 1:, 1:])
-         + torch.mul(torch.nn.functional.conv2d(v_old[:, :, :-1, :-1], torch.flip(v_filter, [2]), groups=2),
-                     H[:, None, :-1, :-1])
-         + torch.mul(torch.nn.functional.conv2d(v_old[:, :, :-1, 1:], torch.flip(v_filter, [2, 3]), groups=2),
-                     H[:, None, :-1, 1:])) / dt
-
-    v_a_filter = dx ** 2 / 36 * torch.tensor([[2, 4], [1, 2]], dtype=torch.float32, device=H.device)[None, :, :]
-    v_a_filter = torch.stack((v_a_filter, v_a_filter))
+    F = integration_B_grid(v_old, H, dx) / dt
 
     # Compute wind term in RHS (C_a A τ_a, ϕ)
     t_a = C_a * torch.mul(torch.linalg.norm(v_a, dim=1, keepdim=True), v_a)
-    F += (torch.mul(torch.nn.functional.conv2d(t_a[:, :, 1:, :-1], v_a_filter, groups=2), A[:, None, 1:, :-1])
-          + torch.mul(torch.nn.functional.conv2d(t_a[:, :, 1:, 1:], torch.flip(v_a_filter, [3]), groups=2),
-                      A[:, None, 1:, 1:])
-          + torch.mul(torch.nn.functional.conv2d(t_a[:, :, :-1, :-1], torch.flip(v_a_filter, [2]), groups=2),
-                      A[:, None, :-1, :-1])
-          + torch.mul(torch.nn.functional.conv2d(t_a[:, :, :-1, 1:], torch.flip(v_a_filter, [2, 3]), groups=2),
-                      A[:, None, :-1, 1:]))
+    F += integration_B_grid(t_a, A, dx)
 
     return F
 
