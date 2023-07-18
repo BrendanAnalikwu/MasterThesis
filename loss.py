@@ -248,7 +248,11 @@ def loss_func(dv: torch.Tensor, H: torch.Tensor, A: torch.Tensor, v_old: torch.T
     """
     time_deriv = integration_B_grid(dv, H, dx) / dt
 
-    coriolis_term = 0  # TODO: implement
+    v_c = torch.empty_like(dv)
+    v_c[:, 0] = -v_old[:, 1] - dv[:, 1]
+    v_c[:, 1] = v_old[:, 0] + dv[:, 0]
+    coriolis_term = integration_B_grid(T*f_c*v_c, H, dx)
+
     v_o_diff = v_o - v_old - dv
     t_o = C_o * torch.mul(torch.linalg.norm(v_o_diff, dim=1, keepdim=True), v_o_diff)
     ocean_term = integration_B_grid(t_o, A, dx)
