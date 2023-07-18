@@ -137,24 +137,24 @@ def form(v: torch.Tensor, H: torch.Tensor, A: torch.Tensor, dx: float, C: float,
 
     # Set convolutional filters for easy computation
     # v_filter = dx ** 2 / 36 * torch.tensor([[1, 4, 1], [4, 16, 4], [1, 4, 1]], dtype=torch.float32)
-    v_filter = dx ** 2 / 36 * torch.tensor([[2, 4], [1, 2]], dtype=torch.float32)[None, :, :]
+    v_filter = dx ** 2 / 36 * torch.tensor([[2, 4], [1, 2]], dtype=torch.float32, device=H.device)[None, :, :]
     v_filter = torch.stack((v_filter, v_filter))
 
     # Compute first term in LHS (H v / dt, ϕ)
-    A = (torch.mul(torch.nn.functional.conv2d(v[:, :, 1:, :-1], v_filter, groups=2), H[:, None, 1:, :-1])
-         + torch.mul(torch.nn.functional.conv2d(v[:, :, 1:, 1:], torch.flip(v_filter, [3]), groups=2),
-                     H[:, None, 1:, 1:])
-         + torch.mul(torch.nn.functional.conv2d(v[:, :, :-1, :-1], torch.flip(v_filter, [2]), groups=2),
-                     H[:, None, :-1, :-1])
-         + torch.mul(torch.nn.functional.conv2d(v[:, :, :-1, 1:], torch.flip(v_filter, [2, 3]), groups=2),
-                     H[:, None, :-1, 1:])) / dt
+    mat = (torch.mul(torch.nn.functional.conv2d(v[:, :, 1:, :-1], v_filter, groups=2), H[:, None, 1:, :-1])
+           + torch.mul(torch.nn.functional.conv2d(v[:, :, 1:, 1:], torch.flip(v_filter, [3]), groups=2),
+                       H[:, None, 1:, 1:])
+           + torch.mul(torch.nn.functional.conv2d(v[:, :, :-1, :-1], torch.flip(v_filter, [2]), groups=2),
+                       H[:, None, :-1, :-1])
+           + torch.mul(torch.nn.functional.conv2d(v[:, :, :-1, 1:], torch.flip(v_filter, [2, 3]), groups=2),
+                       H[:, None, :-1, 1:])) / dt
 
     # Compute stress term in LHS (C_r σ, ∇ϕ)
-    s_filter = dx ** 2 / 3 * torch.tensor([[1, 1], [1, 1]], dtype=torch.float32)[None, None, :, :]
-    A[:, 0:1, :, :] -= C_r * torch.nn.functional.conv2d((s_xx + s_xy)[:, None, ...], s_filter)
-    A[:, 1:2, :, :] -= C_r * torch.nn.functional.conv2d((s_xy + s_yy)[:, None, ...], s_filter)
+    s_filter = dx ** 2 / 3 * torch.tensor([[1, 1], [1, 1]], dtype=torch.float32, device=H.device)[None, None, :, :]
+    mat[:, 0:1, :, :] -= C_r * torch.nn.functional.conv2d((s_xx + s_xy)[:, None, ...], s_filter)
+    mat[:, 1:2, :, :] -= C_r * torch.nn.functional.conv2d((s_xy + s_yy)[:, None, ...], s_filter)
 
-    return A
+    return mat
 
 
 def vector(H: torch.Tensor, A: torch.Tensor, v_old: torch.Tensor, v_a: torch.Tensor, C_a: float,
@@ -184,7 +184,7 @@ def vector(H: torch.Tensor, A: torch.Tensor, v_old: torch.Tensor, v_a: torch.Ten
     F : torch.Tensor
         Right hand side vector with shape (N, 2, H, W)
     """
-    v_filter = dx ** 2 / 36 * torch.tensor([[2, 4], [1, 2]], dtype=torch.float32)[None, :, :]
+    v_filter = dx ** 2 / 36 * torch.tensor([[2, 4], [1, 2]], dtype=torch.float32, device=H.device)[None, :, :]
     v_filter = torch.stack((v_filter, v_filter))
 
     # Compute first term in RHS (H v_old / dt, ϕ)
@@ -196,7 +196,7 @@ def vector(H: torch.Tensor, A: torch.Tensor, v_old: torch.Tensor, v_a: torch.Ten
          + torch.mul(torch.nn.functional.conv2d(v_old[:, :, :-1, 1:], torch.flip(v_filter, [2, 3]), groups=2),
                      H[:, None, :-1, 1:])) / dt
 
-    v_a_filter = dx ** 2 / 36 * torch.tensor([[2, 4], [1, 2]], dtype=torch.float32)[None, :, :]
+    v_a_filter = dx ** 2 / 36 * torch.tensor([[2, 4], [1, 2]], dtype=torch.float32, device=H.device)[None, :, :]
     v_a_filter = torch.stack((v_a_filter, v_a_filter))
 
     # Compute wind term in RHS (C_a A τ_a, ϕ)

@@ -7,10 +7,23 @@ from tqdm import trange
 import matplotlib.pyplot as plt
 
 from generate_data import read_vtk
+from loss import loss_func
 from surrogate_net import SurrogateNet
 
 dev = torch.device('cuda') if torch.cuda.is_available() else torch.device('cpu')
 
+# Constants
+L = 1e6
+T = 1e3
+G = 1.
+C_o = 1026 * 5.5e-3 * L / (900 * G)
+C_a = 1.3 * 1.2e-3 * L / (900 * G)
+C_r = 27.5e3 * T ** 2 / (2 * 900 * L ** 2)
+e_2 = .5
+C = 20
+f_c = 1.46e-4
+dx = 512e3 / 256 / L  # 4km
+dt = 1e3 / T  # 1000s
 
 def read_velocities(filenames: List[str]):
     res = torch.zeros((len(filenames), 2, 257, 257))
@@ -59,6 +72,7 @@ v_a = v_a.to(dev)
 criterion = torch.nn.MSELoss().to(dev)
 optim = torch.optim.Adam(model.parameters(), lr=1e-4)
 losses = []
+PINN_losses = []
 
 pbar = trange(10000)
 for i in pbar:
@@ -73,7 +87,12 @@ for i in pbar:
         torch.nn.utils.clip_grad_norm_(model.parameters(), 1e-3)
         optim.step()
         losses.append(loss.item())
+
+        with torch.no_grad():
+            PINN_losses.append(loss_func((data[mb] + output) * 1e-4, H[mb], A[mb], data[mb] * 1e-4, v_a[mb] * 1e-2, C_r,
+                                         C_a, T, e_2, C, f_c, dx, dt).item())
+        torch.cuda.empty_cache()
     # pbar.set_postfix(loss=((output.detach()[0,0]-label.detach()[mb[0],0]).abs().mean()/label.detach()[mb[0],0].abs().mean()).cpu())
-    pbar.set_postfix(loss=loss.item())
+    pbar.set_postfix(loss=loss.item(), PINN=PINN_losses[-1])
 
 print('done')
