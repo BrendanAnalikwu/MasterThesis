@@ -30,7 +30,7 @@ def delta(vx_x: torch.Tensor, vx_y: torch.Tensor, vy_x: torch.Tensor, vy_y: torc
     torch.Tensor
         ∆ values
     """
-    return ((1 + e_2) * (torch.square(vx_x) + torch.square(vy_y))
+    return torch.sqrt((1 + e_2) * (torch.square(vx_x) + torch.square(vy_y))
             + 2 * (1 - e_2) * torch.mul(vx_x, vy_y)
             + e_2 * torch.square(vx_y + vy_x)
             + dmin ** 2)
@@ -200,14 +200,14 @@ def vector(H: torch.Tensor, A: torch.Tensor, v_old: torch.Tensor, v_a: torch.Ten
     v_a_filter = torch.stack((v_a_filter, v_a_filter))
 
     # Compute wind term in RHS (C_a A τ_a, ϕ)
-    t_a = C_a * torch.mul(torch.linalg.norm(v_a, dim=0, keepdim=True), v_a)
+    t_a = C_a * torch.mul(torch.linalg.norm(v_a, dim=1, keepdim=True), v_a)
     F += (torch.mul(torch.nn.functional.conv2d(t_a[:, :, 1:, :-1], v_a_filter, groups=2), A[:, None, 1:, :-1])
           + torch.mul(torch.nn.functional.conv2d(t_a[:, :, 1:, 1:], torch.flip(v_a_filter, [3]), groups=2),
                       A[:, None, 1:, 1:])
           + torch.mul(torch.nn.functional.conv2d(t_a[:, :, :-1, :-1], torch.flip(v_a_filter, [2]), groups=2),
                       A[:, None, :-1, :-1])
           + torch.mul(torch.nn.functional.conv2d(t_a[:, :, :-1, 1:], torch.flip(v_a_filter, [2, 3]), groups=2),
-                      A[:, None, :-1, 1:])) / dt
+                      A[:, None, :-1, 1:]))
 
     return F
 
@@ -252,7 +252,7 @@ def loss_func(v: torch.Tensor, H: torch.Tensor, A: torch.Tensor, v_old: torch.Te
     loss : torch.Tensor
         Total loss value
     """
-    return (1e4 * torch.sum(torch.pow(vector(H, A, v_old, v_a, C_a, dx, dt)
-                                      - form(v, H, A, dx, C, e_2, dt, T, f_c, C_r), 2))
+    return (dx ** -3 * torch.sum(torch.pow(vector(H, A, v_old, v_a, C_a, dx, dt)
+                                          - form(v, H, A, dx, C, e_2, dt, T, f_c, C_r), 2))
             + torch.sum(torch.pow(v[:, :, 0, :], 2)) + torch.sum(torch.pow(v[:, :, -1, :], 2))
             + torch.sum(torch.pow(v[:, :, 0, 1:-1], 2)) + torch.sum(torch.pow(v[:, :, -1, 1:-1], 2))) * 1e6
