@@ -202,8 +202,8 @@ def vector(H: torch.Tensor, A: torch.Tensor, v_old: torch.Tensor, v_a: torch.Ten
     return F
 
 
-def loss_func(dv: torch.Tensor, H: torch.Tensor, A: torch.Tensor, v_old: torch.Tensor, v_a: torch.Tensor, C_r, C_a, T,
-              e_2, C, f_c, dx, dt) -> torch.Tensor:
+def loss_func(dv: torch.Tensor, H: torch.Tensor, A: torch.Tensor, v_old: torch.Tensor, v_a: torch.Tensor,
+              v_o: torch.Tensor, C_r, C_a, C_o, T, e_2, C, f_c, dx, dt) -> torch.Tensor:
     """
     Loss computation using the PINN-like approach. The PINN loss is weighted with the boundary condition loss, such that
     they are of approximate same importance.
@@ -219,11 +219,15 @@ def loss_func(dv: torch.Tensor, H: torch.Tensor, A: torch.Tensor, v_old: torch.T
     v_old : torch.Tensor
         Ice velocity tensor of shape (N, 2, H+1, W+1) from previous time step
     v_a : torch.Tensor
-        Wind velocity tensor of shape (N, 2, H+1, W+1) from previous time step
+        Wind velocity tensor of shape (N, 2, H+1, W+1)
+    v_o : torch.Tensor
+        Water velocity tensor of shape (N, 2, H+1, W+1) or (1, 2, H+1, W+1)
     C_r : float
         Mehlmann number
     C_a : float
         Wind number
+    C_o : float
+        Water number
     T : float
         Characteristic time
     e_2 : float
@@ -245,7 +249,9 @@ def loss_func(dv: torch.Tensor, H: torch.Tensor, A: torch.Tensor, v_old: torch.T
     time_deriv = integration_B_grid(dv, H, dx) / dt
 
     coriolis_term = 0  # TODO: implement
-    ocean_term = 0  # TODO: implement
+    v_o_diff = v_o - v_old - dv
+    t_o = C_o * torch.mul(torch.linalg.norm(v_o_diff, dim=1, keepdim=True), v_o_diff)
+    ocean_term = integration_B_grid(t_o, A, dx)
 
     # Compute wind term in RHS (C_a A τ_a, ϕ)
     t_a = C_a * torch.mul(torch.linalg.norm(v_a, dim=1, keepdim=True), v_a)

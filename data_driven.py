@@ -57,17 +57,21 @@ dt = 2 * 1000 / 60 / 60 / 24
 t = torch.tensor([t * dt + starttime for t in range(1, 96)], dtype=torch.float).reshape(-1, 1, 1)
 midpoint = 50 + 50 * t
 alpha = pi * 2 / 5
-x, y = torch.meshgrid(torch.linspace(0, 512, 257), torch.linspace(0, 512, 257), indexing='xy')
+x, y = torch.meshgrid(torch.linspace(0, 512, 257), torch.linspace(0, 512, 257), indexing='xy')  # km
 x = x.reshape(1, 257, 257)
 y = y.reshape(1, 257, 257)
 r = torch.sqrt(torch.square(midpoint - x) + torch.square(midpoint - y))
 s = 1 / 50 * torch.exp(-r / 100)
 ws = torch.tanh(t * (8 - t) / 2)
 v_a = torch.empty(95, 2, 257, 257)
-v_a[:, 0, :, :] = (cos(alpha) * (x - midpoint) + sin(alpha) * (y - midpoint)) * s * ws * 15
+v_a[:, 0, :, :] = (cos(alpha) * (x - midpoint) + sin(alpha) * (y - midpoint)) * s * ws * 15  # m/s
 v_a[:, 1, :, :] = (-sin(alpha) * (x - midpoint) + cos(alpha) * (y - midpoint)) * s * ws * 15
-v_a = -v_a * 1e-1
+v_a = -v_a * 1e-1  # correct scaling should be *1e-3 and then *1e4
 v_a = v_a.to(dev)
+
+v_o = torch.empty(1, 2, 257, 257)
+v_o[:, 0] = .01 * (y/250 - 1) * 1e-3
+v_o[:, 1] = .01 * (1 - x/250) * 1e-3
 
 criterion = torch.nn.MSELoss().to(dev)
 optim = torch.optim.Adam(model.parameters(), lr=1e-4)
@@ -90,7 +94,7 @@ for i in pbar:
 
         with torch.no_grad():
             PINN_losses.append(
-                loss_func(output * 1e-4, H[mb], A[mb], data[mb] * 1e-4, v_a[mb] * 1e-2, C_r, C_a, T, e_2,
+                loss_func(output * 1e-4, H[mb], A[mb], data[mb] * 1e-4, v_a[mb] * 1e-2, v_o, C_r, C_a, C_o, T, e_2,
                           C, f_c, dx, dt).item())
         torch.cuda.empty_cache()
     # pbar.set_postfix(loss=((output.detach()[0,0]-label.detach()[mb[0],0]).abs().mean()/label.detach()[mb[0],0].abs().mean()).cpu())
