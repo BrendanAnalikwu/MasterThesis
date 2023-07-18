@@ -202,7 +202,7 @@ def vector(H: torch.Tensor, A: torch.Tensor, v_old: torch.Tensor, v_a: torch.Ten
     return F
 
 
-def loss_func(v: torch.Tensor, H: torch.Tensor, A: torch.Tensor, v_old: torch.Tensor, v_a: torch.Tensor, C_r, C_a, T,
+def loss_func(dv: torch.Tensor, H: torch.Tensor, A: torch.Tensor, v_old: torch.Tensor, v_a: torch.Tensor, C_r, C_a, T,
               e_2, C, f_c, dx, dt) -> torch.Tensor:
     """
     Loss computation using the PINN-like approach. The PINN loss is weighted with the boundary condition loss, such that
@@ -210,7 +210,7 @@ def loss_func(v: torch.Tensor, H: torch.Tensor, A: torch.Tensor, v_old: torch.Te
 
     Parameters
     ----------
-    v : torch.Tensor
+    dv : torch.Tensor
         Ice velocity tensor of shape (N, 2, H+1, W+1)
     H: torch.Tensor
         Ice height tensor of shape (N, H, W)
@@ -242,7 +242,25 @@ def loss_func(v: torch.Tensor, H: torch.Tensor, A: torch.Tensor, v_old: torch.Te
     loss : torch.Tensor
         Total loss value
     """
-    return (dx ** -3 * torch.sum(torch.pow(vector(H, A, v_old, v_a, C_a, dx, dt)
-                                          - form(v, H, A, dx, C, e_2, dt, T, f_c, C_r), 2))
-            + torch.sum(torch.pow(v[:, :, 0, :], 2)) + torch.sum(torch.pow(v[:, :, -1, :], 2))
-            + torch.sum(torch.pow(v[:, :, 0, 1:-1], 2)) + torch.sum(torch.pow(v[:, :, -1, 1:-1], 2))) * 1e6
+    time_deriv = integration_B_grid(dv, H, dx) / dt
+
+    coriolis_term = 0  # TODO: implement
+    ocean_term = 0  # TODO: implement
+
+    # Compute wind term in RHS (C_a A τ_a, ϕ)
+    t_a = C_a * torch.mul(torch.linalg.norm(v_a, dim=1, keepdim=True), v_a)
+    wind_term = integration_B_grid(t_a, A, dx)
+
+    # Stress computation
+    s_xx, s_yy, s_xy = internal_stress(v_old + dv, H, A, dx, C, e_2)
+    s_filter = dx ** 2 / 3 * torch.tensor([[1, 1], [1, 1]], dtype=torch.float32, device=H.device)[None, None, :, :]
+    stress_term = torch.empty_like(time_deriv)
+    stress_term[:, 0:1, :, :] = C_r * torch.nn.functional.conv2d((s_xx + s_xy)[:, None, ...], s_filter)
+    stress_term[:, 1:2, :, :] = C_r * torch.nn.functional.conv2d((s_xy + s_yy)[:, None, ...], s_filter)
+
+    # A - F
+    fem_total = time_deriv + coriolis_term - stress_term - ocean_term - wind_term
+
+    return (dx ** -3 * torch.sum(torch.pow(fem_total, 2))
+            + torch.sum(torch.pow(dv[:, :, 0, :], 2)) + torch.sum(torch.pow(dv[:, :, -1, :], 2))
+            + torch.sum(torch.pow(dv[:, :, 0, 1:-1], 2)) + torch.sum(torch.pow(dv[:, :, -1, 1:-1], 2))) * 1e6

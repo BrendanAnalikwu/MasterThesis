@@ -89,8 +89,9 @@ for i in pbar:
         losses.append(loss.item())
 
         with torch.no_grad():
-            PINN_losses.append(loss_func((data[mb] + output) * 1e-4, H[mb], A[mb], data[mb] * 1e-4, v_a[mb] * 1e-2, C_r,
-                                         C_a, T, e_2, C, f_c, dx, dt).item())
+            PINN_losses.append(
+                loss_func(output * 1e-4, H[mb], A[mb], data[mb] * 1e-4, v_a[mb] * 1e-2, C_r, C_a, T, e_2,
+                          C, f_c, dx, dt).item())
         torch.cuda.empty_cache()
     # pbar.set_postfix(loss=((output.detach()[0,0]-label.detach()[mb[0],0]).abs().mean()/label.detach()[mb[0],0].abs().mean()).cpu())
     pbar.set_postfix(loss=loss.item(), PINN=PINN_losses[-1])
