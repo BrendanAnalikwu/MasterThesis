@@ -19,11 +19,12 @@ G = 1.
 C_o = 1026 * 5.5e-3 * L / (900 * G)
 C_a = 1.3 * 1.2e-3 * L / (900 * G)
 C_r = 27.5e3 * T ** 2 / (2 * 900 * L ** 2)
-e_2 = .5
+e_2 = .25
 C = 20
 f_c = 1.46e-4
 dx = 512e3 / 256 / L  # 4km
-dt = 1e3 / T  # 1000s
+dT = 1e3 / T  # 1000s
+
 
 def read_velocities(filenames: List[str]):
     res = torch.zeros((len(filenames), 2, 257, 257))
@@ -69,7 +70,7 @@ v_a[:, 1, :, :] = (-sin(alpha) * (x - midpoint) + cos(alpha) * (y - midpoint)) *
 v_a = -v_a * 1e-1  # correct scaling should be *1e-3 and then *1e4
 v_a = v_a.to(dev)
 
-v_o = torch.empty(1, 2, 257, 257)
+v_o = torch.empty(1, 2, 257, 257, device=dev)
 v_o[:, 0] = .01 * (y/250 - 1) * 1e-3
 v_o[:, 1] = .01 * (1 - x/250) * 1e-3
 
@@ -77,6 +78,8 @@ criterion = torch.nn.MSELoss().to(dev)
 optim = torch.optim.Adam(model.parameters(), lr=1e-4)
 losses = []
 PINN_losses = []
+
+loss_func(label * 1e-4, H, A, data * 1e-4, v_a * 1e-2, v_o, C_r, C_a, C_o, T, e_2, C, f_c, dx, 1.)
 
 pbar = trange(10000)
 for i in pbar:

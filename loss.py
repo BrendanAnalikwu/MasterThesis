@@ -249,17 +249,18 @@ def loss_func(dv: torch.Tensor, H: torch.Tensor, A: torch.Tensor, v_old: torch.T
     time_deriv = integration_B_grid(dv, H, dx) / dt
 
     v_c = torch.empty_like(dv)
-    v_c[:, 0] = -v_old[:, 1] - dv[:, 1]
-    v_c[:, 1] = v_old[:, 0] + dv[:, 0]
+    v_o_diff = v_o - v_old - dv
+    v_c[:, 0] = v_o_diff[:, 1]
+    v_c[:, 1] = -v_o_diff[:, 0]
     coriolis_term = integration_B_grid(T*f_c*v_c, H, dx)
 
-    v_o_diff = v_o - v_old - dv
-    t_o = C_o * torch.mul(torch.linalg.norm(v_o_diff, dim=1, keepdim=True), v_o_diff)
-    ocean_term = integration_B_grid(t_o, A, dx)
+    # v_o_diff = v_o - v_old - dv
+    t_o = C_o * torch.mul(torch.sqrt(v_o_diff.square().sum(1, keepdim=True) + 1e-8), v_o_diff)
+    ocean_term = integration_B_grid(t_o, torch.ones_like(A), dx)
 
     # Compute wind term in RHS (C_a A τ_a, ϕ)
     t_a = C_a * torch.mul(torch.linalg.norm(v_a, dim=1, keepdim=True), v_a)
-    wind_term = integration_B_grid(t_a, A, dx)
+    wind_term = integration_B_grid(t_a, torch.ones_like(A), dx)
 
     # Stress computation
     s_xx, s_yy, s_xy = internal_stress(v_old + dv, H, A, dx, C, e_2)
@@ -271,6 +272,6 @@ def loss_func(dv: torch.Tensor, H: torch.Tensor, A: torch.Tensor, v_old: torch.T
     # A - F
     fem_total = time_deriv + coriolis_term - stress_term - ocean_term - wind_term
 
-    return (dx ** -3 * torch.sum(torch.pow(fem_total, 2))
+    return (dx ** -2 * torch.sum(torch.pow(fem_total, 2))
             + torch.sum(torch.pow(dv[:, :, 0, :], 2)) + torch.sum(torch.pow(dv[:, :, -1, :], 2))
-            + torch.sum(torch.pow(dv[:, :, 0, 1:-1], 2)) + torch.sum(torch.pow(dv[:, :, -1, 1:-1], 2))) * 1e6
+            + torch.sum(torch.pow(dv[:, :, 0, 1:-1], 2)) + torch.sum(torch.pow(dv[:, :, -1, 1:-1], 2)))
