@@ -116,7 +116,7 @@ def generate_sample(process_id: int = 0) -> np.ndarray:
     return np.concatenate((a, b, data))
 
 
-def read_vtk(filename: str, point_data: bool = True, variable_name: str = ''):
+def read_vtk(filename: str, point_data: bool = True, variable_name: str = '', indexing: str = 'xy'):
     """
     Reads a vtk file and returns an ordered flattened array with function values.
 
@@ -128,6 +128,8 @@ def read_vtk(filename: str, point_data: bool = True, variable_name: str = ''):
         Whether the data to read lies in the cells or points
     variable_name : str
         Name of the variable to read from vtk file
+    indexing : str
+        Indexing mode, either “xy” or “ij”
 
     Returns
     -------
@@ -144,7 +146,6 @@ def read_vtk(filename: str, point_data: bool = True, variable_name: str = ''):
     # Get coordinates from vtk file
     # This gives a n*3 array, where the last variable is for time. Since this is steady-state, we can override this col
 
-
     # Get solution at each point
     if point_data:
         data = VN.vtk_to_numpy(vtk_data.GetPoints().GetData())
@@ -152,9 +153,14 @@ def read_vtk(filename: str, point_data: bool = True, variable_name: str = ''):
     else:
         data = VN.vtk_to_numpy(vtk_data.GetPoints().GetData())[VN.vtk_to_numpy(vtk_data.GetCells().GetData())[1::5]]
         data[:, 2] = vtk_data.GetCellData().GetScalars(variable_name)
+
     # Reorder data
-    data = data[data[:, 0].argsort()]
-    data = data[data[:, 1].argsort(kind='mergesort')]
+    if indexing == 'xy':
+        data = data[data[:, 0].argsort()]
+        data = data[data[:, 1].argsort(kind='mergesort')]
+    else:
+        data = data[data[:, 1].argsort()]
+        data = data[data[:, 0].argsort(kind='mergesort')]
 
     return data[:, 2]
 
