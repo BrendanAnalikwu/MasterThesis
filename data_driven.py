@@ -83,24 +83,31 @@ loss_func(label * 1e-4, H, A, data * 1e-4, v_a * 1e-2, v_o, C_r, C_a, C_o, T, e_
 
 pbar = trange(10000)
 for i in pbar:
-    # if i == 2000:
-    #     for g in optim.param_groups:
-    #         g['lr'] = 1e-5
+    if i == 200:
+        for g in optim.param_groups:
+            g['lr'] = 1e-5
     idx = np.array_split(np.random.permutation(range(len(data))), 5)
     for mb in idx:
         output = model(data[mb], H[mb], A[mb], v_a[mb])
-        loss = criterion(output, label[mb])
+        if i < 200:
+            loss = criterion(output, label[mb])
+            losses.append(loss.item())
+            with torch.no_grad():
+                PINN_losses.append(
+                    loss_func(output * 1e-4, H[mb], A[mb], data[mb] * 1e-4, v_a[mb] * 1e-2, v_o, C_r, C_a, C_o, T, e_2,
+                              C, f_c, dx, dt).item())
+        else:
+            loss = loss_func(output * 1e-4, H[mb], A[mb], data[mb] * 1e-4, v_a[mb] * 1e-2, v_o, C_r, C_a, C_o, T, e_2,
+                             C, f_c, dx, dt)
+            PINN_losses.append(loss.item())
+            with torch.no_grad():
+                losses.append(criterion(output, label[mb]).item())
+
         loss.backward()
         torch.nn.utils.clip_grad_norm_(model.parameters(), 1e-3)
         optim.step()
-        losses.append(loss.item())
-
-        with torch.no_grad():
-            PINN_losses.append(
-                loss_func(output * 1e-4, H[mb], A[mb], data[mb] * 1e-4, v_a[mb] * 1e-2, v_o, C_r, C_a, C_o, T, e_2,
-                          C, f_c, dx, dt).item())
         torch.cuda.empty_cache()
     # pbar.set_postfix(loss=((output.detach()[0,0]-label.detach()[mb[0],0]).abs().mean()/label.detach()[mb[0],0].abs().mean()).cpu())
-    pbar.set_postfix(loss=loss.item(), PINN=PINN_losses[-1])
+    pbar.set_postfix(loss=losses[-1], PINN=PINN_losses[-1])
 
 print('done')
