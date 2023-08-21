@@ -1,3 +1,4 @@
+from math import sqrt
 from typing import Tuple
 
 import torch
@@ -114,6 +115,68 @@ def integration_B_grid(vertex: torch.Tensor, cell: torch.Tensor, dx: float):
                      cell[:, None, :-1, 1:])
 
     return res * dx ** 2 / 36
+
+
+def stress(v: torch.Tensor, H: torch.Tensor, A: torch.Tensor, dx: float, C: float, e_2: float, C_r: float,
+           dmin: float = 2e-6):
+    P = H * torch.exp(-C*(1-A))
+
+    v1 = v[:, :, :-1, :-1]
+    v2 = v[:, :, 1:, :-1]
+    v3 = v[:, :, :-1, 1:]
+    v4 = v[:, :, 1:, 1:]
+
+    v__ = v1 - v2 - v3 + v4
+
+    g = (1 + e_2) * v__[:, 1].square() + e_2 * v__[:, 0].square()
+    h = (1 + e_2) * v__[:, 0].square() + e_2 * v__[:, 1].square()
+    i = 2 * v__[:, 0] * v__[:, 1]
+    j = 2 * (((1 + e_2) * (v3[:, 1] - v1[:, 1]) + (1 - e_2) * (v2[:, 0] - v1[:, 0])) * v__[:, 1]
+             + e_2 * v__[:, 0] * (v3[:, 0] - v1[:, 0] + v2[:, 1] - v1[:, 1]))
+    k = 2 * (((1 + e_2) * (v2[:, 0] - v1[:, 0]) + (1 - e_2) * (v3[:, 1] - v1[:, 1])) * v__[:, 0]
+             + e_2 * v__[:, 1] * (v3[:, 0] - v1[:, 0] + v2[:, 1] - v1[:, 1]))
+    l = (1 + e_2) * ((v2[:, 0] - v1[:, 0]).square() + (v3[:, 1] - v1[:, 1]).square()) + 2 * (1 - e_2) * (
+                v2[:, 0] - v1[:, 0]) * (v3[:, 1] - v1[:, 1]) + e_2 * (
+                    (v2[:, 1] - v1[:, 1]).square() + (v3[:, 0] - v1[:, 0]).square() + 2 * (v2[:, 1] - v1[:, 1]) * (
+                        v3[:, 0] - v1[:, 0]))
+    a = (1 - e_2) * v__[:, 1]
+    b = (1 + e_2) * v__[:, 0]
+    c = (1 + e_2) * (v2[:, 0] - v1[:, 0]) + (1 - e_2) * (v3[:, 1] - v1[:, 1])
+
+    coords = torch.tensor([.5 - .5 / sqrt(3), .5 + .5 / sqrt(3)], device=H.device)
+    x, y = torch.meshgrid(coords, coords, indexing='xy')
+    x = x.reshape(1, 4, 1, 1)
+    y = y.reshape(1, 4, 1, 1)
+
+    delta_ = torch.sqrt(g[:, None] * x.square() + h[:, None] * y.square() + i[:, None] * x * y + j[:, None] * x
+                        + k[:, None] * y + l[:, None] + dmin ** 2)
+    sxx = P[:, None] * ((a[:, None] * x + b[:, None] * y + c[:, None]) / delta_ - 1)
+
+    sxy = P[:, None] * e_2 * (v__[:, :1] * x + v__[:, 1:] * y + v2[:, 1:] - v1[:, 1:] + v3[:, :1] - v1[:, :1]) / delta_
+
+    filter_dx = torch.empty(1, 4, 2, 2, device=H.device)
+    filter_dx[0, :, 0, 0] = y.flatten()
+    filter_dx[0, :, 1, 0] = -y.flatten()
+    filter_dx[0, :, 0, 1] = 1 - y.flatten()
+    filter_dx[0, :, 1, 1] = y.flatten() - 1
+    filter_dy = torch.empty(1, 4, 2, 2, device=H.device)
+    filter_dy[0, :, 0, 0] = x.flatten()
+    filter_dy[0, :, 1, 0] = 1 - x.flatten()
+    filter_dy[0, :, 0, 1] = -x.flatten()
+    filter_dy[0, :, 1, 1] = x.flatten() - 1
+
+    res1 = torch.nn.functional.conv2d(sxx, filter_dx) / 4
+    res1 += torch.nn.functional.conv2d(sxy, filter_dy) / 4
+
+    d = (1 + e_2) * v__[:, 1]
+    e = (1 - e_2) * v__[:, 0]
+    f = (1 - e_2) * (v2[:, 0] - v1[:, 0]) + (1 + e_2) * (v3[:, 1] - v1[:, 1])
+    syy = P[:, None] * ((d[:, None] * x + e[:, None] * y + f[:, None]) / delta_ - 1)
+
+    res2 = torch.nn.functional.conv2d(sxy, filter_dx)/4
+    res2 += torch.nn.functional.conv2d(syy, filter_dy)/4
+
+    return - torch.cat((res1, res2), dim=1) * dx * C_r
 
 
 def form(v: torch.Tensor, H: torch.Tensor, A: torch.Tensor, dx: float, C: float, e_2: float, dt: float, T: float,
@@ -263,11 +326,7 @@ def loss_func(dv: torch.Tensor, H: torch.Tensor, A: torch.Tensor, v_old: torch.T
     wind_term = integration_B_grid(t_a, torch.ones_like(A), dx)
 
     # Stress computation
-    s_xx, s_yy, s_xy = internal_stress(v_old + dv, H, A, dx, C, e_2)
-    s_filter = dx ** 2 / 3 * torch.tensor([[1, 1], [1, 1]], dtype=torch.float32, device=H.device)[None, None, :, :]
-    stress_term = torch.empty_like(time_deriv)
-    stress_term[:, 0:1, :, :] = C_r * torch.nn.functional.conv2d((s_xx + s_xy)[:, None, ...], s_filter)
-    stress_term[:, 1:2, :, :] = C_r * torch.nn.functional.conv2d((s_xy + s_yy)[:, None, ...], s_filter)
+    stress_term = stress(v_old + dv, H, A, dx, C, e_2, C_r)
 
     # A - F
     fem_total = time_deriv + coriolis_term - stress_term - ocean_term - wind_term
