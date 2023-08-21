@@ -29,8 +29,8 @@ dT = 1e3 / T  # 1000s
 def read_velocities(filenames: List[str]):
     res = torch.zeros((len(filenames), 2, 257, 257))
     for i, fn in zip(trange(len(filenames)), filenames):
-        res[i, 0] = torch.tensor(read_vtk(fn, True, 'u000').reshape((257, 257)), dtype=torch.float)
-        res[i, 1] = torch.tensor(read_vtk(fn, True, 'u001').reshape((257, 257)), dtype=torch.float)
+        res[i, 0] = torch.tensor(read_vtk(fn, True, 'u000', indexing='ij').reshape((257, 257)), dtype=torch.float)
+        res[i, 1] = torch.tensor(read_vtk(fn, True, 'u001', indexing='ij').reshape((257, 257)), dtype=torch.float)
     return res
 
 
@@ -38,8 +38,8 @@ def read_HA(filenames: List[str]):
     H = torch.zeros((len(filenames), 256, 256))
     A = torch.zeros((len(filenames), 256, 256))
     for i, fn in zip(trange(len(filenames)), filenames):
-        H[i] = torch.tensor(read_vtk(fn, False, 'u000').reshape((1, 256, 256)), dtype=torch.float)
-        A[i] = torch.tensor(read_vtk(fn, False, 'u001').reshape((1, 256, 256)), dtype=torch.float)
+        H[i] = torch.tensor(read_vtk(fn, False, 'u000', indexing='ij').reshape((1, 256, 256)), dtype=torch.float)
+        A[i] = torch.tensor(read_vtk(fn, False, 'u001', indexing='ij').reshape((1, 256, 256)), dtype=torch.float)
     return H, A
 
 
@@ -58,7 +58,7 @@ dt = 2 * 1000 / 60 / 60 / 24
 t = torch.tensor([t * dt + starttime for t in range(1, 96)], dtype=torch.float).reshape(-1, 1, 1)
 midpoint = 50 + 50 * t
 alpha = pi * 2 / 5
-x, y = torch.meshgrid(torch.linspace(0, 512, 257), torch.linspace(0, 512, 257), indexing='xy')  # km
+x, y = torch.meshgrid(torch.linspace(0, 512, 257), torch.linspace(0, 512, 257), indexing='ij')
 x = x.reshape(1, 257, 257)
 y = y.reshape(1, 257, 257)
 r = torch.sqrt(torch.square(midpoint - x) + torch.square(midpoint - y))
