@@ -1,10 +1,11 @@
-from math import cos, sin, pi
+from math import cos, sin, pi, sqrt
 from typing import List
 
 import numpy as np
 import torch
 from torch.utils.data import Dataset, DataLoader
 from torch.utils.data.dataset import T_co
+from torchvision.utils import make_grid
 from tqdm import trange
 
 from generate_data import read_vtk
@@ -57,11 +58,16 @@ class BenchData(Dataset):
         self.v_o[:, 0] = .01 * (y / 250 - 1) * 1e-3
         self.v_o[:, 1] = .01 * (1 - x / 250) * 1e-3
 
+        self.data_t, self.H_t, self.A_t, self.v_a_t, self.v_o_t, self.label_t = transform_data(self.data, self.H,
+                                                                                               self.A, self.v_a,
+                                                                                               self.v_o, self.label)
+
     def __getitem__(self, index) -> T_co:
-        return self.data[index], self.H[index], self.A[index], self.v_a[index], self.v_o[index], self.label[index]
+        return (self.data_t[index], self.H_t[index], self.A_t[index],
+                self.v_a_t[index], self.v_o_t[index], self.label_t[index])
 
     def __len__(self) -> int:
-        return len(self.data)
+        return len(self.data_t)
 
 
 def random_crop_collate(crop_size: int):
@@ -89,3 +95,35 @@ def random_crop_collate(crop_size: int):
              enumerate(label)], dim=0)
         return data, H, A, v_a, v_o, label
     return func
+
+
+def get_patches(im: torch.Tensor, patch_size: int):
+    patches = im.unfold(2, patch_size+1, patch_size)
+    patches = patches.unfold(3, patch_size+1, patch_size)
+    patches = patches.permute(0, 2, 3, 1, 4, 5).reshape(-1, 2, patch_size+1, patch_size+1)
+    return patches
+
+
+def stitch(im: torch.Tensor, batch_size: int):
+    assert len(im.shape) == 4, "Tensor is not 4D"
+    assert im.shape[0] % batch_size == 0, "First dimension not divisible by batch_size"
+    patch_size = im.shape[-1] - 1
+    patches_1d = sqrt(im.shape[0] / batch_size)
+    assert patches_1d.is_integer(), "Wrong dimensions"
+
+    im = im.reshape(batch_size, -1, 2, patch_size + 1, patch_size + 1)
+    im = torch.stack([make_grid(im[i], int(patches_1d), padding=0) for i in range(im.shape[0])], dim=0)
+    mask = np.arange(patches_1d * 5) % 5 != 4
+    mask[-1] = True
+    im = im[:, :, mask][:, :, :, mask]
+    return im
+
+
+def transform_data(data, H, A, v_a, v_o, label, chunk_size: int = 4):
+    data = get_patches(data, chunk_size)
+    v_a = get_patches(v_a, chunk_size)
+    v_o = get_patches(v_o, chunk_size)
+    label = get_patches(label, chunk_size)
+    H = torch.stack(torch.stack(H.split(chunk_size, 1), 1).split(chunk_size, 3), 2).reshape(-1, chunk_size, chunk_size)
+    A = torch.stack(torch.stack(A.split(chunk_size, 1), 1).split(chunk_size, 3), 2).reshape(-1, chunk_size, chunk_size)
+    return data, H, A, v_a, v_o, label

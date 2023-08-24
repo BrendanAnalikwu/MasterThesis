@@ -60,7 +60,7 @@ model = PatchNet().to(dev)
 # v_o[:, 1] = .01 * (1 - x/250) * 1e-3
 
 dataset = BenchData("C:\\Users\\Brend\\Thesis\\GAS\\seaice\\benchmark\\Results8\\", list(range(1, 97)), dev)
-dataloader = DataLoader(dataset, batch_size=100, shuffle=True, collate_fn=random_crop_collate(crop_size=4))
+dataloader = DataLoader(dataset, batch_size=10000, shuffle=True)  # , collate_fn=random_crop_collate(crop_size=4))
 
 criterion = torch.nn.MSELoss().to(dev)
 optim = torch.optim.Adam(model.parameters(), lr=1e-5)
@@ -70,13 +70,13 @@ PINN_losses = []
 # loss_func(label * 1e-4, H, A, data * 1e-4, v_a * 1e-2, v_o, C_r, C_a, C_o, T, e_2, C, f_c, dx, 1.)
 
 crop_size = 4
-pbar = trange(int(2e5))
+pbar = trange(int(2e3))
 for i in pbar:
     # if i == 200:
     #     for g in optim.param_groups:
     #         g['lr'] = 1e-5
     for (data, H, A, v_a, v_o, label) in dataloader:
-        output = model(data, H, A, v_a, label)
+        output = model(data, H, A, v_a, v_o)
         # if i < 200:
         loss = criterion(output, label)
         losses.append(loss.item())
