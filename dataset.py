@@ -29,7 +29,7 @@ def read_HA(filenames: List[str]):
 
 
 class BenchData(Dataset):
-    def __init__(self, basedir: str, steps: List[int], dev: torch.device = 'cpu'):
+    def __init__(self, basedir: str, steps: List[int], chunk_size: int = 5, overlap: int = 1, dev: torch.device = 'cpu'):
         self.velocities = read_velocities([f"{basedir}v.{n:05}.vtk" for n in steps]).to(dev)
         self.data = self.velocities[:-1] * 1e4
         self.label = self.velocities[1:] * 1e4 - self.data
@@ -59,7 +59,7 @@ class BenchData(Dataset):
         self.v_o[:, 1] = .01 * (1 - x / 250) * 1e-3
 
         self.data_t, self.H_t, self.A_t, self.v_a_t, self.v_o_t, self.border_chunks, self.label_t = transform_data(
-            self.data, self.H, self.A, self.v_a, self.v_o, self.label)
+            self.data, self.H, self.A, self.v_a, self.v_o, self.label, chunk_size, overlap)
 
     def __getitem__(self, index) -> T_co:
         return (self.data_t[index], self.H_t[index], self.A_t[index], self.v_a_t[index],
@@ -100,10 +100,10 @@ def random_crop_collate(crop_size: int):
     return func
 
 
-def get_patches(im: torch.Tensor, patch_size: int):
-    patches = im.unfold(2, patch_size+1, patch_size)
-    patches = patches.unfold(3, patch_size+1, patch_size)
-    patches = patches.permute(0, 2, 3, 1, 4, 5).reshape(-1, 2, patch_size+1, patch_size+1)
+def get_patches(im: torch.Tensor, patch_size: int, overlap: int = 1):
+    patches = im.unfold(2, patch_size, patch_size - overlap)
+    patches = patches.unfold(3, patch_size, patch_size - overlap)
+    patches = patches.permute(0, 2, 3, 1, 4, 5).reshape(-1, im.shape[1], patch_size, patch_size)
     return patches
 
 
@@ -122,17 +122,28 @@ def stitch(im: torch.Tensor, batch_size: int):
     return im
 
 
-def transform_data(data, H, A, v_a, v_o, label, chunk_size: int = 4, overlap: int = 1):
-    data = get_patches(data, chunk_size + overlap, overlap)
-    v_a = get_patches(v_a, chunk_size + overlap, overlap)
-    v_o = get_patches(v_o, chunk_size + overlap, overlap)
-    label = get_patches(label, chunk_size + overlap, overlap)
+def transform_data(data, H, A, v_a, v_o, label, chunk_size: int = 5, overlap: int = 1):
+    assert chunk_size > overlap, "chunk_size needs to be larger than overlap"
+    assert overlap > 0, "overlap needs to be greater than 0"
+    assert (data.shape[2] - overlap) % (chunk_size - overlap), "Height cannot be divided using chunk_size and overlap"
+    assert (data.shape[3] - overlap) % (chunk_size - overlap), "Width cannot be divided using chunk_size and overlap"
+    n_chunks = (data.shape[2] - overlap) / (chunk_size - overlap)
 
-    H = torch.stack(torch.stack(H.split(chunk_size, 2), 1).split(chunk_size, 4), 2).reshape(-1, chunk_size, chunk_size)
-    A = torch.stack(torch.stack(A.split(chunk_size, 2), 1).split(chunk_size, 4), 2).reshape(-1, chunk_size, chunk_size)
+    data = get_patches(data, chunk_size, overlap)
+    v_a = get_patches(v_a, chunk_size, overlap)
+    v_o = get_patches(v_o, chunk_size, overlap)
 
-    border_chunks = torch.arange(data.shape[0], device=data.device).reshape(-1, 64, 64)
-    border_chunks = (border_chunks % 64 == 0) + (border_chunks % 64 == 63)
+    if overlap % 2 == 0:
+        padding = overlap / 2
+        label = get_patches(label[:, :, padding:-padding, padding:-padding], chunk_size - overlap, 0)
+    else:
+        label = get_patches(label, chunk_size, overlap)
+
+    H = get_patches(H, chunk_size - 1, overlap - 1)
+    A = get_patches(A, chunk_size - 1, overlap - 1)
+
+    border_chunks = torch.arange(data.shape[0], device=data.device).reshape(-1, n_chunks, n_chunks)
+    border_chunks = (border_chunks % n_chunks == 0) + (border_chunks % n_chunks == (n_chunks - 1))
     border_chunks = border_chunks + border_chunks.transpose(1, 2)
     border_chunks = border_chunks.reshape(-1, 1)
     return data, H, A, v_a, v_o, border_chunks, label
