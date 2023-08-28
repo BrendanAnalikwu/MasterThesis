@@ -58,13 +58,16 @@ class BenchData(Dataset):
         self.v_o[:, 0] = .01 * (y / 250 - 1) * 1e-3
         self.v_o[:, 1] = .01 * (1 - x / 250) * 1e-3
 
-        self.data_t, self.H_t, self.A_t, self.v_a_t, self.v_o_t, self.label_t = transform_data(self.data, self.H,
-                                                                                               self.A, self.v_a,
-                                                                                               self.v_o, self.label)
+        self.data_t, self.H_t, self.A_t, self.v_a_t, self.v_o_t, self.border_chunks, self.label_t = transform_data(
+            self.data, self.H, self.A, self.v_a, self.v_o, self.label)
 
     def __getitem__(self, index) -> T_co:
-        return (self.data_t[index], self.H_t[index], self.A_t[index],
-                self.v_a_t[index], self.v_o_t[index], self.label_t[index])
+        return (self.data_t[index], self.H_t[index], self.A_t[index], self.v_a_t[index],
+                self.v_o_t[index], self.border_chunks[index], self.label_t[index])
+
+    def retrieve(self, index) -> T_co:
+        return (self.data[index], self.H[index], self.A[index], self.v_a[index],
+                self.v_o[index], self.label[index])
 
     def __len__(self) -> int:
         return len(self.data_t)
@@ -126,4 +129,9 @@ def transform_data(data, H, A, v_a, v_o, label, chunk_size: int = 4):
     label = get_patches(label, chunk_size)
     H = torch.stack(torch.stack(H.split(chunk_size, 1), 1).split(chunk_size, 3), 2).reshape(-1, chunk_size, chunk_size)
     A = torch.stack(torch.stack(A.split(chunk_size, 1), 1).split(chunk_size, 3), 2).reshape(-1, chunk_size, chunk_size)
-    return data, H, A, v_a, v_o, label
+
+    border_chunks = torch.arange(data.shape[0], device=data.device).reshape(-1, 64, 64)
+    border_chunks = (border_chunks % 64 == 0) + (border_chunks % 64 == 63)
+    border_chunks = border_chunks + border_chunks.transpose(1, 2)
+    border_chunks = border_chunks.reshape(-1, 1)
+    return data, H, A, v_a, v_o, border_chunks, label

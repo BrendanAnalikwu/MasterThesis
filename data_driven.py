@@ -75,8 +75,8 @@ for i in pbar:
     # if i == 200:
     #     for g in optim.param_groups:
     #         g['lr'] = 1e-5
-    for (data, H, A, v_a, v_o, label) in dataloader:
-        output = model(data, H, A, v_a, v_o)
+    for (data, H, A, v_a, v_o, border_chunk, label) in dataloader:
+        output = model(data, H, A, v_a, v_o, border_chunk)
         # if i < 200:
         loss = criterion(output, label)
         losses.append(loss.item())
