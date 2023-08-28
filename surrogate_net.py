@@ -83,7 +83,7 @@ class PatchNet(torch.nn.Module):
 
     def forward(self, v, H, A, v_a, v_o, border):
         x1 = self.layer1(torch.cat((v, v_a, v_o), 1))
-        x2 = self.layer2(torch.cat((x1, H[:, None], A[:, None]), 1))
+        x2 = self.layer2(torch.cat((x1, H, A), 1))
         # x3 = self.layer3(x2.reshape(-1, 64))
         x4 = self.layer4(torch.cat((x2.reshape(-1, 64), border), 1))
         x5 = self.layer5(x4.reshape(-1, 64, 1, 1))

@@ -23,8 +23,8 @@ def read_HA(filenames: List[str]):
     H = torch.zeros((len(filenames), 256, 256))
     A = torch.zeros((len(filenames), 256, 256))
     for i, fn in zip(trange(len(filenames)), filenames):
-        H[i] = torch.tensor(read_vtk(fn, False, 'u000', indexing='ij').reshape((1, 256, 256)), dtype=torch.float)
-        A[i] = torch.tensor(read_vtk(fn, False, 'u001', indexing='ij').reshape((1, 256, 256)), dtype=torch.float)
+        H[i] = torch.tensor(read_vtk(fn, False, 'u000', indexing='ij').reshape((1, 1, 256, 256)), dtype=torch.float)
+        A[i] = torch.tensor(read_vtk(fn, False, 'u001', indexing='ij').reshape((1, 1, 256, 256)), dtype=torch.float)
     return H, A
 
 
@@ -122,13 +122,14 @@ def stitch(im: torch.Tensor, batch_size: int):
     return im
 
 
-def transform_data(data, H, A, v_a, v_o, label, chunk_size: int = 4):
-    data = get_patches(data, chunk_size)
-    v_a = get_patches(v_a, chunk_size)
-    v_o = get_patches(v_o, chunk_size)
-    label = get_patches(label, chunk_size)
-    H = torch.stack(torch.stack(H.split(chunk_size, 1), 1).split(chunk_size, 3), 2).reshape(-1, chunk_size, chunk_size)
-    A = torch.stack(torch.stack(A.split(chunk_size, 1), 1).split(chunk_size, 3), 2).reshape(-1, chunk_size, chunk_size)
+def transform_data(data, H, A, v_a, v_o, label, chunk_size: int = 4, overlap: int = 1):
+    data = get_patches(data, chunk_size + overlap, overlap)
+    v_a = get_patches(v_a, chunk_size + overlap, overlap)
+    v_o = get_patches(v_o, chunk_size + overlap, overlap)
+    label = get_patches(label, chunk_size + overlap, overlap)
+
+    H = torch.stack(torch.stack(H.split(chunk_size, 2), 1).split(chunk_size, 4), 2).reshape(-1, chunk_size, chunk_size)
+    A = torch.stack(torch.stack(A.split(chunk_size, 2), 1).split(chunk_size, 4), 2).reshape(-1, chunk_size, chunk_size)
 
     border_chunks = torch.arange(data.shape[0], device=data.device).reshape(-1, 64, 64)
     border_chunks = (border_chunks % 64 == 0) + (border_chunks % 64 == 63)
