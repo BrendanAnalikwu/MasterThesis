@@ -123,6 +123,14 @@ def stitch(im: torch.Tensor, batch_size: int):
 
 
 def transform_data(data, H, A, v_a, v_o, label, chunk_size: int = 5, overlap: int = 1):
+    if data.dim() == 3:
+        data = data[None]
+        H = H[None]
+        A = A[None]
+        v_a = v_a[None]
+        v_o = v_o[None]
+        label = label[None]
+
     assert chunk_size > overlap, "chunk_size needs to be larger than overlap"
     assert overlap > 0, "overlap needs to be greater than 0"
     assert (data.shape[2] - overlap) % (chunk_size - overlap) == 0, "Height cannot be divided using chunk_size and overlap"

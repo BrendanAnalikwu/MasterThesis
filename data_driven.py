@@ -62,7 +62,7 @@ model = PatchNet(5, 3).to(dev)
 dataset = BenchData("C:\\Users\\Brend\\Thesis\\GAS\\seaice\\benchmark\\Results8\\", list(range(1, 97)), 5, 2, dev=dev)
 dataloader = DataLoader(dataset, batch_size=10000, shuffle=True)  # , collate_fn=random_crop_collate(crop_size=4))
 
-criterion = torch.nn.MSELoss().to(dev)
+criterion = torch.nn.L1Loss().to(dev)
 optim = torch.optim.Adam(model.parameters(), lr=1e-5)
 losses = []
 PINN_losses = []
