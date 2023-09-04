@@ -1,4 +1,4 @@
-from math import cos, sin
+from math import cos, sin, ceil
 from typing import List
 import numpy as np
 import torch
@@ -28,7 +28,7 @@ dx = 512e3 / 256 / L  # 4km
 dT = 1e3 / T  # 1000s
 
 
-model = PatchNet().to(dev)
+model = PatchNet(5, 3).to(dev)
 
 # velocities = read_velocities([f"C:\\Users\\Brend\\Thesis\\GAS\\seaice\\benchmark\\Results8\\v.{n:05}.vtk" for n in range(1, 97)]).to(dev)
 # data = velocities[:95] * 1e4
@@ -59,7 +59,7 @@ model = PatchNet().to(dev)
 # v_o[:, 0] = .01 * (y/250 - 1) * 1e-3
 # v_o[:, 1] = .01 * (1 - x/250) * 1e-3
 
-dataset = BenchData("C:\\Users\\Brend\\Thesis\\GAS\\seaice\\benchmark\\Results8\\", list(range(1, 97)), dev)
+dataset = BenchData("C:\\Users\\Brend\\Thesis\\GAS\\seaice\\benchmark\\Results8\\", list(range(1, 97)), 5, 2, dev=dev)
 dataloader = DataLoader(dataset, batch_size=10000, shuffle=True)  # , collate_fn=random_crop_collate(crop_size=4))
 
 criterion = torch.nn.MSELoss().to(dev)

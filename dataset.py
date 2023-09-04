@@ -145,5 +145,5 @@ def transform_data(data, H, A, v_a, v_o, label, chunk_size: int = 5, overlap: in
     border_chunks = torch.arange(data.shape[0], device=data.device).reshape(-1, n_chunks, n_chunks)
     border_chunks = (border_chunks % n_chunks == 0) + (border_chunks % n_chunks == (n_chunks - 1))
     border_chunks = border_chunks + border_chunks.transpose(1, 2)
-    border_chunks = border_chunks.reshape(-1, 1)
+    border_chunks = border_chunks.reshape(-1, 1, 1, 1).to(torch.float32)
     return data, H, A, v_a, v_o, border_chunks, label
