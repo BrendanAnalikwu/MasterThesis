@@ -20,11 +20,11 @@ def read_velocities(filenames: List[str]):
 
 
 def read_HA(filenames: List[str]):
-    H = torch.zeros((len(filenames), 256, 256))
-    A = torch.zeros((len(filenames), 256, 256))
+    H = torch.zeros((len(filenames), 1, 256, 256))
+    A = torch.zeros((len(filenames), 1, 256, 256))
     for i, fn in zip(trange(len(filenames)), filenames):
-        H[i] = torch.tensor(read_vtk(fn, False, 'u000', indexing='ij').reshape((1, 1, 256, 256)), dtype=torch.float)
-        A[i] = torch.tensor(read_vtk(fn, False, 'u001', indexing='ij').reshape((1, 1, 256, 256)), dtype=torch.float)
+        H[i] = torch.tensor(read_vtk(fn, False, 'u000', indexing='ij').reshape((1, 256, 256)), dtype=torch.float)
+        A[i] = torch.tensor(read_vtk(fn, False, 'u001', indexing='ij').reshape((1, 256, 256)), dtype=torch.float)
     return H, A
 
 
@@ -49,12 +49,12 @@ class BenchData(Dataset):
         r = torch.sqrt(torch.square(midpoint - x) + torch.square(midpoint - y))
         s = 1 / 50 * torch.exp(-r / 100)
         ws = torch.tanh(t * (8 - t) / 2)
-        self.v_a = torch.empty(95, 2, 257, 257, device=dev)
+        self.v_a = torch.empty_like(self.data)
         self.v_a[:, 0, :, :] = (cos(alpha) * (x - midpoint) + sin(alpha) * (y - midpoint)) * s * ws * 15  # m/s
         self.v_a[:, 1, :, :] = (-sin(alpha) * (x - midpoint) + cos(alpha) * (y - midpoint)) * s * ws * 15
         self.v_a = -self.v_a * 1e-1  # correct scaling should be *1e-3 and then *1e4
 
-        self.v_o = torch.empty(95, 2, 257, 257, device=dev)
+        self.v_o = torch.empty_like(self.data)
         self.v_o[:, 0] = .01 * (y / 250 - 1) * 1e-3
         self.v_o[:, 1] = .01 * (1 - x / 250) * 1e-3
 
@@ -125,16 +125,16 @@ def stitch(im: torch.Tensor, batch_size: int):
 def transform_data(data, H, A, v_a, v_o, label, chunk_size: int = 5, overlap: int = 1):
     assert chunk_size > overlap, "chunk_size needs to be larger than overlap"
     assert overlap > 0, "overlap needs to be greater than 0"
-    assert (data.shape[2] - overlap) % (chunk_size - overlap), "Height cannot be divided using chunk_size and overlap"
-    assert (data.shape[3] - overlap) % (chunk_size - overlap), "Width cannot be divided using chunk_size and overlap"
-    n_chunks = (data.shape[2] - overlap) / (chunk_size - overlap)
+    assert (data.shape[2] - overlap) % (chunk_size - overlap) == 0, "Height cannot be divided using chunk_size and overlap"
+    assert (data.shape[3] - overlap) % (chunk_size - overlap) == 0, "Width cannot be divided using chunk_size and overlap"
+    n_chunks = int((data.shape[2] - overlap) / (chunk_size - overlap))
 
     data = get_patches(data, chunk_size, overlap)
     v_a = get_patches(v_a, chunk_size, overlap)
     v_o = get_patches(v_o, chunk_size, overlap)
 
     if overlap % 2 == 0:
-        padding = overlap / 2
+        padding = int(overlap / 2)
         label = get_patches(label[:, :, padding:-padding, padding:-padding], chunk_size - overlap, 0)
     else:
         label = get_patches(label, chunk_size, overlap)

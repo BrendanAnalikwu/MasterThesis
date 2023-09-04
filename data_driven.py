@@ -70,11 +70,11 @@ PINN_losses = []
 # loss_func(label * 1e-4, H, A, data * 1e-4, v_a * 1e-2, v_o, C_r, C_a, C_o, T, e_2, C, f_c, dx, 1.)
 
 crop_size = 4
-pbar = trange(int(2e3))
+pbar = trange(int(5e3 / ceil(len(dataset) / 1e4)))
 for i in pbar:
-    # if i == 200:
-    #     for g in optim.param_groups:
-    #         g['lr'] = 1e-5
+    if i == int(700 / ceil(len(dataset) / 1e4)):
+        for g in optim.param_groups:
+            g['lr'] = 1e-6
     for (data, H, A, v_a, v_o, border_chunk, label) in dataloader:
         output = model(data, H, A, v_a, v_o, border_chunk)
         # if i < 200:
