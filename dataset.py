@@ -40,7 +40,7 @@ class BenchData(Dataset):
 
         starttime = 343.6 * 1000 / 60 / 60 / 24
         dt = 2 * 1000 / 60 / 60 / 24
-        t = torch.tensor([t * dt + starttime for t in range(1, 96)], dtype=torch.float).reshape(-1, 1, 1)
+        t = torch.tensor([t * dt + starttime for t in steps[:-1]], dtype=torch.float).reshape(-1, 1, 1)
         midpoint = 50 + 50 * t
         alpha = pi * 2 / 5
         x, y = torch.meshgrid(torch.linspace(0, 512, 257), torch.linspace(0, 512, 257), indexing='ij')
@@ -131,6 +131,14 @@ def transform_data(data, H, A, v_a, v_o, label, chunk_size: int = 5, overlap: in
         v_o = v_o[None]
         label = label[None]
 
+    if overlap > 2:
+        padding = int((overlap - 2) / 2)
+        data = torch.nn.functional.pad(data, (padding, padding, padding, padding))
+        H = torch.nn.functional.pad(H, (padding, padding, padding, padding))
+        A = torch.nn.functional.pad(A, (padding, padding, padding, padding))
+        v_a = torch.nn.functional.pad(v_a, (padding, padding, padding, padding))
+        v_o = torch.nn.functional.pad(v_o, (padding, padding, padding, padding))
+
     assert chunk_size > overlap, "chunk_size needs to be larger than overlap"
     assert overlap > 0, "overlap needs to be greater than 0"
     assert (data.shape[2] - overlap) % (chunk_size - overlap) == 0, "Height cannot be divided using chunk_size and overlap"
@@ -142,8 +150,8 @@ def transform_data(data, H, A, v_a, v_o, label, chunk_size: int = 5, overlap: in
     v_o = get_patches(v_o, chunk_size, overlap)
 
     if overlap % 2 == 0:
-        padding = int(overlap / 2)
-        label = get_patches(label[:, :, padding:-padding, padding:-padding], chunk_size - overlap, 0)
+        # padding = int(overlap / 2)
+        label = get_patches(label[:, :, 1:-1, 1:-1], chunk_size - overlap, 0)
     else:
         label = get_patches(label, chunk_size, overlap)
 

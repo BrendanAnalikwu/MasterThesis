@@ -11,6 +11,7 @@ from dataset import BenchData, random_crop_collate
 from generate_data import read_vtk
 from loss import loss_func
 from surrogate_net import SurrogateNet, PatchNet
+from visualisation import plot_comparison
 
 dev = torch.device('cuda') if torch.cuda.is_available() else torch.device('cpu')
 
@@ -28,7 +29,7 @@ dx = 512e3 / 256 / L  # 4km
 dT = 1e3 / T  # 1000s
 
 
-model = PatchNet(5, 3).to(dev)
+model = PatchNet(4, 15).to(dev)
 
 # velocities = read_velocities([f"C:\\Users\\Brend\\Thesis\\GAS\\seaice\\benchmark\\Results8\\v.{n:05}.vtk" for n in range(1, 97)]).to(dev)
 # data = velocities[:95] * 1e4
@@ -59,27 +60,39 @@ model = PatchNet(5, 3).to(dev)
 # v_o[:, 0] = .01 * (y/250 - 1) * 1e-3
 # v_o[:, 1] = .01 * (1 - x/250) * 1e-3
 
-dataset = BenchData("C:\\Users\\Brend\\Thesis\\GAS\\seaice\\benchmark\\Results8\\", list(range(1, 97)), 5, 2, dev=dev)
-dataloader = DataLoader(dataset, batch_size=10000, shuffle=True)  # , collate_fn=random_crop_collate(crop_size=4))
+dataset = BenchData("C:\\Users\\Brend\\Thesis\\GAS\\seaice\\benchmark\\Results8\\", list(range(90, 97)), 19, 4, dev=dev)
+dataloader = DataLoader(dataset, batch_size=2500, shuffle=True)  # , collate_fn=random_crop_collate(crop_size=4))
 
-criterion = torch.nn.L1Loss().to(dev)
-optim = torch.optim.Adam(model.parameters(), lr=1e-5)
+criterion = torch.nn.MSELoss().to(dev)
+structure_criterion = torch.nn.MSELoss().to(dev)
+inst_norm = torch.nn.InstanceNorm2d(2).to(dev)
+optim = torch.optim.Adam(model.parameters(), lr=1e-4)
+scheduler = torch.optim.lr_scheduler.MultiStepLR(optim, milestones=[4000], gamma=.1)
 losses = []
+classic_losses = []
+contrast_losses = []
 PINN_losses = []
 
 # loss_func(label * 1e-4, H, A, data * 1e-4, v_a * 1e-2, v_o, C_r, C_a, C_o, T, e_2, C, f_c, dx, 1.)
 
 crop_size = 4
-pbar = trange(int(5e3 / ceil(len(dataset) / 1e4)))
+pbar = trange(int(5e3 / ceil(len(dataset) / 2.5e3)))
 for i in pbar:
-    if i == int(700 / ceil(len(dataset) / 1e4)):
-        for g in optim.param_groups:
-            g['lr'] = 1e-6
+    # if i == int(700 / ceil(len(dataset) / 2.5e3)):
+    #     for g in optim.param_groups:
+    #         g['lr'] = 1e-6
     for (data, H, A, v_a, v_o, border_chunk, label) in dataloader:
-        output = model(data, H, A, v_a, v_o, border_chunk)
+        contrast, g, b = model(data, H, A, v_a, v_o, border_chunk)
+        output = contrast * b + g
         # if i < 200:
-        loss = criterion(output, label)
+        # classic_loss = criterion(output, data[:, :, 1:-1, 1:-1])
+        classic_loss = ((g - label.mean(dim=(2, 3), keepdim=True)).square().mean()
+                        + (b - label.std(dim=(2, 3), keepdim=True, unbiased=False)).square().mean())
+        contrast_loss = structure_criterion(contrast, inst_norm(label))
+        loss = classic_loss + contrast_loss
         losses.append(loss.item())
+        classic_losses.append(classic_loss.item())
+        contrast_losses.append(contrast_loss.item())
         # with torch.no_grad():
         #     PINN_losses.append(
         #         loss_func(output * 1e-4, H[mb], A[mb], data[mb] * 1e-4, v_a[mb] * 1e-2, v_o, C_r, C_a, C_o, T, e_2,
@@ -95,7 +108,9 @@ for i in pbar:
         torch.nn.utils.clip_grad_norm_(model.parameters(), 1.)
         optim.step()
         torch.cuda.empty_cache()
+        scheduler.step()
     # pbar.set_postfix(loss=((output.detach()[0,0]-label.detach()[mb[0],0]).abs().mean()/label.detach()[mb[0],0].abs().mean()).cpu())
-    pbar.set_postfix(loss=losses[-1])  # , PINN=PINN_losses[-1])
+    pbar.set_postfix(loss=classic_losses[-1], contrast_loss=contrast_losses[-1])  # , PINN=PINN_losses[-1])
 
+plot_comparison(model, dataset, 0, 0)
 print('done')
