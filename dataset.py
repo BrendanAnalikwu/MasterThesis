@@ -29,7 +29,8 @@ def read_HA(filenames: List[str]):
 
 
 class BenchData(Dataset):
-    def __init__(self, basedir: str, steps: List[int], chunk_size: int = 5, overlap: int = 1, dev: torch.device = 'cpu'):
+    def __init__(self, basedir: str, steps: List[int], patch_size: int = 3, overlap: int = 1,
+                 dev: torch.device = 'cpu'):
         self.velocities = read_velocities([f"{basedir}v.{n:05}.vtk" for n in steps]).to(dev)
         self.data = self.velocities[:-1] * 1e4
         self.label = self.velocities[1:] * 1e4 - self.data
@@ -59,7 +60,7 @@ class BenchData(Dataset):
         self.v_o[:, 1] = .01 * (1 - x / 250) * 1e-3
 
         self.data_t, self.H_t, self.A_t, self.v_a_t, self.v_o_t, self.border_chunks, self.label_t = transform_data(
-            self.data, self.H, self.A, self.v_a, self.v_o, self.label, chunk_size, overlap)
+            self.data, self.H, self.A, self.v_a, self.v_o, self.label, patch_size, overlap)
 
     def __getitem__(self, index) -> T_co:
         return (self.data_t[index], self.H_t[index], self.A_t[index], self.v_a_t[index],
@@ -100,10 +101,11 @@ def random_crop_collate(crop_size: int):
     return func
 
 
-def get_patches(im: torch.Tensor, patch_size: int, overlap: int = 1):
-    patches = im.unfold(2, patch_size, patch_size - overlap)
-    patches = patches.unfold(3, patch_size, patch_size - overlap)
-    patches = patches.permute(0, 2, 3, 1, 4, 5).reshape(-1, im.shape[1], patch_size, patch_size)
+def get_patches(im: torch.Tensor, patch_size: int = 3, overlap: int = 1, vertex: bool = True):
+    output_patch_size = patch_size + 2 * overlap if vertex else patch_size - 1 + 2 * overlap
+    patches = im.unfold(2, output_patch_size, patch_size)
+    patches = patches.unfold(3, output_patch_size, patch_size)
+    patches = patches.permute(0, 2, 3, 1, 4, 5).reshape(-1, im.shape[1], output_patch_size, output_patch_size)
     return patches
 
 
@@ -122,7 +124,8 @@ def stitch(im: torch.Tensor, batch_size: int):
     return im
 
 
-def transform_data(data, H, A, v_a, v_o, label, chunk_size: int = 5, overlap: int = 1):
+def transform_data(data, H, A, v_a, v_o, label, patch_size: int = 3, overlap: int = 1):
+    # Add a first dimension in case the data is not batched
     if data.dim() == 3:
         data = data[None]
         H = H[None]
@@ -131,33 +134,32 @@ def transform_data(data, H, A, v_a, v_o, label, chunk_size: int = 5, overlap: in
         v_o = v_o[None]
         label = label[None]
 
-    if overlap > 2:
-        padding = int((overlap - 2) / 2)
-        data = torch.nn.functional.pad(data, (padding, padding, padding, padding))
-        H = torch.nn.functional.pad(H, (padding, padding, padding, padding))
-        A = torch.nn.functional.pad(A, (padding, padding, padding, padding))
-        v_a = torch.nn.functional.pad(v_a, (padding, padding, padding, padding))
-        v_o = torch.nn.functional.pad(v_o, (padding, padding, padding, padding))
+    # If overlap is larger than 1, pad the input extra
+    if overlap > 1:
+        input_padding = int(overlap - 1)
+        input_padding = (input_padding, input_padding, input_padding, input_padding)
+        data = torch.nn.functional.pad(data, input_padding)
+        H = torch.nn.functional.pad(H, input_padding)
+        A = torch.nn.functional.pad(A, input_padding)
+        v_a = torch.nn.functional.pad(v_a, input_padding)
+        v_o = torch.nn.functional.pad(v_o, input_padding)
 
-    assert chunk_size > overlap, "chunk_size needs to be larger than overlap"
+    # Check if data has right format and compute number of patches to be created
     assert overlap > 0, "overlap needs to be greater than 0"
-    assert (data.shape[2] - overlap) % (chunk_size - overlap) == 0, "Height cannot be divided using chunk_size and overlap"
-    assert (data.shape[3] - overlap) % (chunk_size - overlap) == 0, "Width cannot be divided using chunk_size and overlap"
-    n_chunks = int((data.shape[2] - overlap) / (chunk_size - overlap))
+    assert (data.shape[2] - 2 * overlap) % patch_size == 0, "Height cannot be divided using chunk_size and overlap"
+    assert (data.shape[3] - 2 * overlap) % patch_size == 0, "Width cannot be divided using chunk_size and overlap"
+    n_chunks = int((data.shape[2] - 2 * overlap) / patch_size)
 
-    data = get_patches(data, chunk_size, overlap)
-    v_a = get_patches(v_a, chunk_size, overlap)
-    v_o = get_patches(v_o, chunk_size, overlap)
+    # Get patches
+    data = get_patches(data, patch_size, overlap)
+    v_a = get_patches(v_a, patch_size, overlap)
+    v_o = get_patches(v_o, patch_size, overlap)
+    label = get_patches(label[:, :, 1:-1, 1:-1], patch_size, 0)
 
-    if overlap % 2 == 0:
-        # padding = int(overlap / 2)
-        label = get_patches(label[:, :, 1:-1, 1:-1], chunk_size - overlap, 0)
-    else:
-        label = get_patches(label, chunk_size, overlap)
+    H = get_patches(H, patch_size, overlap, vertex=False)
+    A = get_patches(A, patch_size, overlap, vertex=False)
 
-    H = get_patches(H, chunk_size - 1, overlap - 1)
-    A = get_patches(A, chunk_size - 1, overlap - 1)
-
+    # Create boolean tensor describing if the patch is a border patch
     border_chunks = torch.arange(data.shape[0], device=data.device).reshape(-1, n_chunks, n_chunks)
     border_chunks = (border_chunks % n_chunks == 0) + (border_chunks % n_chunks == (n_chunks - 1))
     border_chunks = border_chunks + border_chunks.transpose(1, 2)

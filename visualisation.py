@@ -1,3 +1,5 @@
+from typing import List
+
 import matplotlib.pyplot as plt
 import torch.nn
 from matplotlib.colors import SymLogNorm
@@ -6,13 +8,13 @@ from torchvision.utils import make_grid
 from dataset import transform_data, BenchData
 
 
-def plot_comparison(model: torch.nn.Module, dataset: BenchData, i: int, channel: int = 0, chunk_size: int = 17,
-                    overlap: int = 2):
-    d = transform_data(*dataset.retrieve(i), chunk_size, overlap)
+def plot_comparison(model: torch.nn.Module, dataset: BenchData, i: int, channel: int = 0, patch_size: int = 3,
+                    overlap: int = 1):
+    d = transform_data(*dataset.retrieve(i), patch_size, overlap)
     model.eval()
-    num_chunks = int(255 / (chunk_size - overlap))
-    c, m, s = model(*d[:-1])[:num_chunks ** 2]
-    res = make_grid(c * s + m, num_chunks, padding=0).detach()
+    num_chunks = int(255 / patch_size)
+    output = model(*d[:-1])[:num_chunks ** 2]
+    res = make_grid(output, num_chunks, padding=0).detach()
     model.train()
 
     fig, ax = plt.subplots(1, 2)
@@ -25,3 +27,11 @@ def plot_comparison(model: torch.nn.Module, dataset: BenchData, i: int, channel:
     fig.subplots_adjust(right=.85)
     cbar_ax = fig.add_axes([.9, .15, .03, .7])
     fig.colorbar(im, cax=cbar_ax)
+
+
+def plot_losses(*args: List, **kwargs):
+    plt.figure()
+    for arg in args:
+        plt.semilogy(arg)
+    if 'names' in kwargs.keys() and len(kwargs['names']) == len(args):
+        plt.legend(kwargs['names'])

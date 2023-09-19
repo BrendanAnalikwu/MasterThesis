@@ -1,66 +1,71 @@
+from typing import List
+
 import torch
 
 
 class PatchNet(torch.nn.Module):
-    def __init__(self, overlap: int = 2, out_size: int = 3, *args, **kwargs):
+    def __init__(self, overlap: int = 1, out_size: int = 3, n_hidden: List[int] = (16, 32, 64), *args, **kwargs):
         super().__init__(*args, **kwargs)
 
-        self.input_layer_v = torch.nn.Conv2d(6, 16, overlap + 1, 1, 0, bias=False)  # -> -2
+        self.input_layer_v = torch.nn.Conv2d(6, n_hidden[0], 2 * overlap + 1, 1, 0, bias=False)  # -> -2
         if overlap > 0:
-            self.input_layer_HA = torch.nn.Conv2d(2, 16, overlap, 1, 0, bias=False)  # -> -1
+            self.input_layer_HA = torch.nn.Conv2d(2, n_hidden[0], 2 * overlap, 1, 0, bias=False)  # -> -1
         else:
             self.input_layer_HA = torch.nn.Sequential(torch.nn.Upsample((out_size, out_size), mode='bilinear'),
-                                                      torch.nn.Conv2d(2, 16, 1, 1, 0))
-        self.input_layer_border = torch.nn.Linear(1, 16, bias=True)  # -> 16x1x1
-        self.input_activation = torch.nn.Sequential(torch.nn.BatchNorm2d(16), torch.nn.GELU())
+                                                      torch.nn.Conv2d(2, n_hidden[0], 1, 1, 0))
+        self.input_layer_border = torch.nn.Linear(1, n_hidden[0], bias=True)  # -> 16x1x1
+        self.input_activation = torch.nn.Sequential(torch.nn.BatchNorm2d(n_hidden[0]), torch.nn.GELU())
 
         self.encoder = torch.nn.Sequential(
             # 16x5x5
-            torch.nn.Conv2d(16, 32, 3, 1, 0),
-            torch.nn.BatchNorm2d(32),
+            torch.nn.Conv2d(n_hidden[0], n_hidden[1], 3, 1, 0),
+            torch.nn.BatchNorm2d(n_hidden[1]),
             torch.nn.GELU())
         for i in range(int((out_size - 3) / 2)):
-            self.encoder.extend(torch.nn.Sequential(torch.nn.Conv2d(32, 32, 3, 1, 0),
-                                                    torch.nn.BatchNorm2d(32),
+            self.encoder.extend(torch.nn.Sequential(torch.nn.Conv2d(n_hidden[1], n_hidden[1], 3, 1, 0),
+                                                    torch.nn.BatchNorm2d(n_hidden[1]),
                                                     torch.nn.GELU()))
         self.encoder.append(
             # 32x2x2
-            torch.nn.Conv2d(32, 68, 1, 1, 0)
+            torch.nn.Conv2d(n_hidden[1], n_hidden[2], 1, 1, 0)
         )
-        self.encoder[-1].bias[-2:].data.fill_(-4)
+        # self.encoder[-1].bias[-2:].data.fill_(-6.)
+        # self.encoder[-1].bias[-4:-2].data.fill_(0.)
 
         self.decoder = torch.nn.Sequential(
-            torch.nn.BatchNorm2d(64),
+            torch.nn.BatchNorm2d(n_hidden[2]),
             torch.nn.GELU(),
             # 64x1x1
-            torch.nn.ConvTranspose2d(64, 16, 3, 1, 0),
-            torch.nn.InstanceNorm2d(16),
+            torch.nn.ConvTranspose2d(n_hidden[2], n_hidden[0], 3, 1, 0),
+            torch.nn.InstanceNorm2d(n_hidden[0]),
             torch.nn.GELU())
         for i in range(int((out_size - 3) / 2)):
             self.decoder.extend(torch.nn.Sequential(torch.nn.Upsample((5 + i * 2, 5 + i * 2), mode='bilinear'),
-                                                    torch.nn.Conv2d(16, 16, 2, 1, 0),
-                                                    torch.nn.BatchNorm2d(16),
+                                                    torch.nn.Conv2d(n_hidden[0], n_hidden[0], 2, 1, 0),
+                                                    torch.nn.BatchNorm2d(n_hidden[0]),
                                                     torch.nn.GELU()))
         self.decoder.extend(torch.nn.Sequential(
             # 16x3x3
             torch.nn.Upsample((out_size + 2, out_size + 2), mode='bilinear'),
-            torch.nn.Conv2d(16, 2, 3, 1, 0),
-            torch.nn.Identity(),
-            torch.nn.InstanceNorm2d(2))
+            torch.nn.Conv2d(n_hidden[0], 2, 3, 1, 0),
+            # torch.nn.Identity(),
+            # torch.nn.InstanceNorm2d(2)
+        )
             # 2x5x5
         )
 
-        self.s_activation = torch.nn.Sigmoid()
-        self.m_activation = torch.nn.Identity()
+        # self.s_activation = torch.nn.Sigmoid()
+        # self.m_activation = torch.nn.Identity()
 
     def forward(self, v, H, A, v_a, v_o, border):
         x = self.input_activation(self.input_layer_v(torch.cat((v, v_a, v_o), 1))
                                   + self.input_layer_HA(torch.cat((H, A), 1))
                                   + self.input_layer_border(border).transpose(1, 3))
         x1 = self.encoder(x)
-        x2 = self.decoder(x1[:, :-4])
-        m, s = x1[:, -4:-2], x1[:, -2:]
-        return x2, self.m_activation(m), self.s_activation(s)
+        x2 = self.decoder(x1)
+        # x2 = self.decoder(x1[:, :-4])
+        # m, s = x1[:, -4:-2], x1[:, -2:]
+        return x2  # , self.m_activation(m), self.s_activation(s)
 
 
 class SurrogateNet(torch.nn.Module):
