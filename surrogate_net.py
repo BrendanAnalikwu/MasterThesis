@@ -1,11 +1,16 @@
-from typing import List
+from typing import Tuple
 
 import torch
 
 
 class PatchNet(torch.nn.Module):
-    def __init__(self, overlap: int = 1, out_size: int = 3, n_hidden: List[int] = (16, 32, 64), *args, **kwargs):
+    def __init__(self, overlap: int = 1, out_size: int = 3, n_hidden: Tuple[int, int, int] = (16, 32, 64), *args,
+                 **kwargs):
         super().__init__(*args, **kwargs)
+
+        self.out_size = out_size
+        self.overlap = overlap
+        self.n_hidden = n_hidden
 
         self.input_layer_v = torch.nn.Conv2d(6, n_hidden[0], 2 * overlap + 1, 1, 0, bias=False)  # -> -2
         if overlap > 0:

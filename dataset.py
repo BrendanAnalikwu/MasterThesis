@@ -3,7 +3,7 @@ from typing import List
 
 import numpy as np
 import torch
-from torch.utils.data import Dataset, DataLoader
+from torch.utils.data import Dataset
 from torch.utils.data.dataset import T_co
 from torchvision.utils import make_grid
 from tqdm import trange

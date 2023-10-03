@@ -1,7 +1,9 @@
+import glob
 from typing import List
 
 import matplotlib.pyplot as plt
 import torch.nn
+import numpy as np
 from matplotlib.colors import SymLogNorm
 from torchvision.utils import make_grid
 
@@ -35,3 +37,26 @@ def plot_losses(*args: List, **kwargs):
         plt.semilogy(arg)
     if 'names' in kwargs.keys() and len(kwargs['names']) == len(args):
         plt.legend(kwargs['names'])
+
+
+def plot_results():
+    res = {}
+    for j in (3, 5, 15):
+        res[j] = []
+        for i in (1, 2, 3, 5, 9, 15):
+            li = []
+            for fn in glob.glob(f'patch_size_experiment/losses/losses_{j}-{i}*.li'):
+                li.append(torch.load(fn)['classic'][-1])
+            res[j].append((sum(li) / len(li), li))
+            # plt.scatter([i] * len(li), li)
+        plt.errorbar([1, 2, 3, 5, 9, 15], [res[j][l][0] for l in range(len(res[j]))], yerr=[np.std(res[j][l][1]) for l in range(len(res[j]))], capsize=5)
+
+    plt.legend([3, 5, 15])
+    plt.xticks([1, 2, 3, 5, 9, 15], [1, 2, 3, 5, 9, 15])
+    plt.show()
+
+
+if __name__ == "__main__":
+    print('plotting results')
+    plot_results()
+    print('done')
