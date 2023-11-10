@@ -5,6 +5,7 @@ from torch.utils.data import DataLoader
 # from tqdm import trange
 
 from dataset import BenchData
+from loss import strain_rate_loss
 from surrogate_net import PatchNet
 # from visualisation import plot_comparison, plot_losses
 # from torchvision.utils import make_grid
@@ -24,6 +25,7 @@ def train(model, dataset, dev, n_steps=128, job_id=None):
     std_losses = []
     contrast_losses = []
     classic_losses = []
+    strain_losses = []
 
     pbar = range(n_steps)
     for i in pbar:
@@ -37,7 +39,8 @@ def train(model, dataset, dev, n_steps=128, job_id=None):
             # Compute losses
             contrast_loss = structure_criterion(contrast, inst_norm(label))
             classic_loss = criterion(output, label)
-            loss = 1e4 * classic_loss + contrast_loss
+            strain_loss = strain_rate_loss(output, label)
+            loss = classic_loss + strain_loss
             with torch.no_grad():
                 mean_loss = (m - label.mean(dim=(2, 3), keepdim=True)).square().mean()
                 std_loss = (s - label.std(dim=(2, 3), keepdim=True, unbiased=False)).square().mean()
@@ -48,6 +51,7 @@ def train(model, dataset, dev, n_steps=128, job_id=None):
             std_losses.append(std_loss.item())
             contrast_losses.append(contrast_loss.item())
             classic_losses.append(classic_loss.item())
+            strain_losses.append(strain_loss.item())
 
             # Gradient computation and optimiser step
             loss.backward()
@@ -64,7 +68,7 @@ def train(model, dataset, dev, n_steps=128, job_id=None):
         model_id += f"_{job_id}"
     torch.save(model, f'model_{model_id}.pt')
     results = {'loss': losses, 'mean': mean_losses, 'std': std_losses, 'contrast': contrast_losses,
-               'classic': classic_losses}
+               'classic': classic_losses, 'strain': strain_losses}
     torch.save(results, f'losses_{model_id}.li')
 
     return model, results
