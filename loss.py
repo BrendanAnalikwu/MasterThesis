@@ -336,9 +336,17 @@ def loss_func(dv: torch.Tensor, H: torch.Tensor, A: torch.Tensor, v_old: torch.T
             + torch.sum(torch.pow(dv[:, :, 0, 1:-1], 2)) + torch.sum(torch.pow(dv[:, :, -1, 1:-1], 2)))
 
 
+def strain_rate(v: torch.tensor):
+    if v.dim() == 3:
+        v = v[None]
+    e_x, e_y = finite_differences(v, 1.)
+    return e_x[:, 0], e_y[:, 1], e_x[:, 1] + e_y[:, 0]
+
+
 def strain_rate_loss(v: torch.tensor, label: torch.tensor):
     error = v - label
     if error.dim() == 3:
         error = error[None]
     e_x, e_y = finite_differences(error, 1.)
-    return (e_x[:, 0].square() + .5 * (e_x[:, 1] + e_y[:, 0]).square() + e_y[:, 1].square()).mean()
+    return (e_x[:, 0].abs() + .5 * (e_x[:, 1] + e_y[:, 0]).abs() + e_y[:, 1].abs()).mean()
+

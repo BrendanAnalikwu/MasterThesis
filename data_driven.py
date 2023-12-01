@@ -18,8 +18,8 @@ def train(model, dataset, dev, n_steps=128, job_id=None):
     criterion = torch.nn.MSELoss().to(dev)
     structure_criterion = torch.nn.MSELoss().to(dev)
     inst_norm = torch.nn.InstanceNorm2d(2).to(dev)
-    optim = torch.optim.Adam(model.parameters(), lr=1e-3, betas=(.95, .995))
-    scheduler = torch.optim.lr_scheduler.MultiStepLR(optim, milestones=[int(n_steps * 2)], gamma=.1)
+    optim = torch.optim.Adam(model.parameters(), lr=1e-4)
+    scheduler = torch.optim.lr_scheduler.MultiStepLR(optim, milestones=[1000, 3000], gamma=.1)
     losses = []
     mean_losses = []
     std_losses = []
@@ -40,7 +40,7 @@ def train(model, dataset, dev, n_steps=128, job_id=None):
             contrast_loss = structure_criterion(contrast, inst_norm(label))
             classic_loss = criterion(output, label)
             strain_loss = strain_rate_loss(output, label)
-            loss = classic_loss + strain_loss
+            loss = classic_loss  # + .01 * strain_loss
             with torch.no_grad():
                 mean_loss = (m - label.mean(dim=(2, 3), keepdim=True)).square().mean()
                 std_loss = (s - label.std(dim=(2, 3), keepdim=True, unbiased=False)).square().mean()
