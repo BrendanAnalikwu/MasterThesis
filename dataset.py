@@ -67,7 +67,7 @@ class BenchData(Dataset):
                 self.v_o_t[index], self.border_chunks[index], self.label_t[index])
 
     def retrieve(self, index) -> T_co:
-        return (self.data[index], self.H[index], self.A[index], self.v_a[index],
+        return (self.label[index] * 1e2, self.H[index], self.A[index], self.v_a[index],
                 self.v_o[index], self.label[index])
 
     def __len__(self) -> int:

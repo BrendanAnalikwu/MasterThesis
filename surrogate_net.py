@@ -48,7 +48,7 @@ class PatchNet(torch.nn.Module):
                                            *dec,
                                            torch.nn.ConvTranspose2d(n_hidden[1], 2, 3, 1, 1))
 
-    def forward(self, v, H, A, v_a, v_o, border):
+    def forward(self, v, H=None, A=None, v_a=None, v_o=None, border=None):
         x = self.input_activation(self.input_layer_v(v))
         x1 = self.encoder(x)
         x2 = self.decoder(x1)
