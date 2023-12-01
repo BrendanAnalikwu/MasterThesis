@@ -60,7 +60,7 @@ class BenchData(Dataset):
         self.v_o[:, 1] = .01 * (1 - x / 250) * 1e-3
 
         self.data_t, self.H_t, self.A_t, self.v_a_t, self.v_o_t, self.border_chunks, self.label_t = transform_data(
-            self.data, self.H, self.A, self.v_a, self.v_o, self.label, patch_size, overlap)
+            self.label * 1e2, self.H, self.A, self.v_a, self.v_o, self.label, patch_size, overlap)
 
     def __getitem__(self, index) -> T_co:
         return (self.data_t[index], self.H_t[index], self.A_t[index], self.v_a_t[index],

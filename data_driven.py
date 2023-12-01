@@ -19,7 +19,7 @@ def train(model, dataset, dev, n_steps=128, job_id=None):
     structure_criterion = torch.nn.MSELoss().to(dev)
     inst_norm = torch.nn.InstanceNorm2d(2).to(dev)
     optim = torch.optim.Adam(model.parameters(), lr=1e-4)
-    scheduler = torch.optim.lr_scheduler.MultiStepLR(optim, milestones=[1000, 3000], gamma=.1)
+    scheduler = torch.optim.lr_scheduler.MultiStepLR(optim, milestones=[2000, 10000], gamma=.1)
     losses = []
     mean_losses = []
     std_losses = []
@@ -66,10 +66,11 @@ def train(model, dataset, dev, n_steps=128, job_id=None):
     model_id = f"{model.out_size}-{model.overlap}-{model.n_hidden}-{model.complexity}-{n_steps}_{stamp}".replace(' ', '')
     if job_id:
         model_id += f"_{job_id}"
-    torch.save(model, f'model_{model_id}.pt')
+    torch.save(model.cpu(), f'model_{model_id}.pt')
     results = {'loss': losses, 'mean': mean_losses, 'std': std_losses, 'contrast': contrast_losses,
                'classic': classic_losses, 'strain': strain_losses}
     torch.save(results, f'losses_{model_id}.li')
+    print(model.encoder[0].weight[0,0])
 
     return model, results
 
@@ -101,7 +102,7 @@ if __name__ == "__main__":
     if os.path.isfile(f'full_dataset_{patch_size}-{overlap}.data'):
         dataset = torch.load(f'full_dataset_{patch_size}-{overlap}.data')
     else:
-        dataset = BenchData(data_path, list(range(1, 97)), patch_size,
+        dataset = BenchData(data_path, list(range(70, 97)), patch_size,
                             overlap, dev=dev)
         if save_dataset:
             torch.save(dataset, f'full_dataset_{patch_size}-{overlap}.data')

@@ -348,5 +348,4 @@ def strain_rate_loss(v: torch.tensor, label: torch.tensor):
     if error.dim() == 3:
         error = error[None]
     e_x, e_y = finite_differences(error, 1.)
-    return (e_x[:, 0].abs() + .5 * (e_x[:, 1] + e_y[:, 0]).abs() + e_y[:, 1].abs()).mean()
-
+    return (e_x[:, 0].square() + .5 * (e_x[:, 1] + e_y[:, 0]).square() + e_y[:, 1].square()).mean()
