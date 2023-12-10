@@ -1,6 +1,7 @@
 import glob
 import os
 import re
+from collections import defaultdict
 from typing import List, Tuple, Union, Dict
 
 import matplotlib.pyplot as plt
@@ -60,6 +61,19 @@ def plot_results(experiment: str, p: Union[Tuple, List] = (3, 5, 15), o: Union[T
     plt.legend(p)
     plt.xticks(o, o)
     return res
+
+
+def plot_experiments_loss(experiments: List[str], loss_type: str = 'classic', last: bool = False):
+    res = defaultdict(lambda: [])
+    for exp in experiments:
+        for fn in glob.glob(f'experiments/{exp}/' + r'*.li'):
+            losses = torch.load(fn)
+            res[exp].append(losses[loss_type][-1] if last else min(losses[loss_type]))
+
+    mean = [np.mean(li) for li in res.values()]
+    # TODO: compute errorbar
+
+    plt.bar(experiments, mean)
 
 
 if __name__ == "__main__":
