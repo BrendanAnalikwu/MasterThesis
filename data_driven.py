@@ -12,7 +12,7 @@ from surrogate_net import PatchNet
 # from dataset import transform_data
 
 
-def train(model, dataset, dev, n_steps=128, job_id=None):
+def train(model, dataset, dev, n_steps=128, strain_weight=1, job_id=None):
     dataloader = DataLoader(dataset, batch_size=ceil(len(dataset) / 10), shuffle=True)
 
     criterion = torch.nn.MSELoss().to(dev)
@@ -40,7 +40,7 @@ def train(model, dataset, dev, n_steps=128, job_id=None):
             contrast_loss = structure_criterion(contrast, inst_norm(label))
             classic_loss = criterion(output, label)
             strain_loss = strain_rate_loss(output, label)
-            loss = classic_loss  # + .01 * strain_loss
+            loss = classic_loss + strain_weight * strain_loss
             with torch.no_grad():
                 mean_loss = (m - label.mean(dim=(2, 3), keepdim=True)).square().mean()
                 std_loss = (s - label.std(dim=(2, 3), keepdim=True, unbiased=False)).square().mean()
@@ -79,7 +79,8 @@ if __name__ == "__main__":
     import sys
     job_id = None
     complexity = 0
-    if len(sys.argv) >= 10:
+    strain_weight = 1.
+    if len(sys.argv) >= 11:
         data_path = (sys.argv[1])
         patch_size = int(sys.argv[2])
         overlap = int(sys.argv[3])
@@ -87,8 +88,9 @@ if __name__ == "__main__":
         complexity = int(sys.argv[7])
         save_dataset = bool(int(sys.argv[8]))
         n_steps = int(sys.argv[9])
-        if len(sys.argv) == 11:
-            job_id = sys.argv[10]
+        strain_weight = float(sys.argv[10])
+        if len(sys.argv) == 12:
+            job_id = sys.argv[11]
     else:
         data_path = 'C:\\Users\\Brend\\Thesis\\GAS\\seaice\\benchmark\\Results8\\'
         patch_size, overlap, hidden = 3, 5, (1, 2, 3)
@@ -107,7 +109,7 @@ if __name__ == "__main__":
         if save_dataset:
             torch.save(dataset, f'full_dataset_{patch_size}-{overlap}.data')
 
-    model, results = train(model, dataset, dev, n_steps, job_id)
+    model, results = train(model, dataset, dev, n_steps, strain_weight, job_id)
 
     # # Plot results
     # plot_comparison(model, dataset, 0, 0, patch_size, overlap)
