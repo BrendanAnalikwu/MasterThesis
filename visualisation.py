@@ -74,6 +74,8 @@ def plot_experiments_loss(experiments: List[str], loss_type: str = 'classic', la
     # TODO: compute errorbar
 
     plt.bar(experiments, mean)
+    for i, exp in enumerate(experiments):
+        plt.scatter([i] * len(res[exp]), res[exp], c='k')
 
 
 if __name__ == "__main__":
