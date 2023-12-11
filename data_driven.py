@@ -6,7 +6,7 @@ from torch.utils.data import DataLoader
 
 from dataset import BenchData
 from loss import strain_rate_loss
-from surrogate_net import PatchNet
+from surrogate_net import SurrogateNet
 # from visualisation import plot_comparison, plot_losses
 # from torchvision.utils import make_grid
 # from dataset import transform_data
@@ -29,9 +29,9 @@ def train(model, dataset, dev, n_steps=128, strain_weight=1, job_id=None):
 
     pbar = range(n_steps)
     for i in pbar:
-        for (data, H, A, v_a, v_o, border_chunk, label) in dataloader:
+        for (data, H, A, v_a, v_o, label) in dataloader:
             # Forward pass and compute output
-            output = model(data, H, A, v_a, v_o, border_chunk)
+            output = model(data, H, A, v_a, v_o)
             contrast = inst_norm(output)
             m = output.mean(dim=(2, 3), keepdim=True)
             s = output.std(dim=(2, 3), keepdim=True, unbiased=False)
@@ -80,34 +80,33 @@ if __name__ == "__main__":
     job_id = None
     complexity = 0
     strain_weight = 1.
-    if len(sys.argv) >= 11:
+    if len(sys.argv) >= 9:
         data_path = (sys.argv[1])
-        patch_size = int(sys.argv[2])
-        overlap = int(sys.argv[3])
-        hidden = (int(sys.argv[4]), int(sys.argv[5]), int(sys.argv[6]))
-        complexity = int(sys.argv[7])
-        save_dataset = bool(int(sys.argv[8]))
-        n_steps = int(sys.argv[9])
-        strain_weight = float(sys.argv[10])
-        if len(sys.argv) == 12:
-            job_id = sys.argv[11]
+        # patch_size = int(sys.argv[2])
+        # overlap = int(sys.argv[3])
+        hidden = (int(sys.argv[2]), int(sys.argv[3]), int(sys.argv[4]))
+        complexity = int(sys.argv[5])
+        save_dataset = bool(int(sys.argv[6]))
+        n_steps = int(sys.argv[7])
+        strain_weight = float(sys.argv[8])
+        if len(sys.argv) == 10:
+            job_id = sys.argv[9]
     else:
         data_path = 'C:\\Users\\Brend\\Thesis\\GAS\\seaice\\benchmark\\Results8\\'
-        patch_size, overlap, hidden = 3, 5, (1, 2, 3)
+        hidden = (1, 2, 3)
         save_dataset = True
         n_steps = 128
 
     dev = torch.device('cuda') if torch.cuda.is_available() else torch.device('cpu')
 
-    model = PatchNet(overlap, patch_size, hidden, complexity).to(dev)
+    model = SurrogateNet(hidden, complexity).to(dev)
 
-    if os.path.isfile(f'full_dataset_{patch_size}-{overlap}.data'):
-        dataset = torch.load(f'full_dataset_{patch_size}-{overlap}.data')
+    if os.path.isfile(f'full_dataset.data'):
+        dataset = torch.load(f'full_dataset.data')
     else:
-        dataset = BenchData(data_path, list(range(70, 97)), patch_size,
-                            overlap, dev=dev)
+        dataset = BenchData(data_path, list(range(70, 97)), dev=dev)
         if save_dataset:
-            torch.save(dataset, f'full_dataset_{patch_size}-{overlap}.data')
+            torch.save(dataset, f'full_dataset.data')
 
     model, results = train(model, dataset, dev, n_steps, strain_weight, job_id)
 
