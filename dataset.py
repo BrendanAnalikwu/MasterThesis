@@ -29,8 +29,7 @@ def read_HA(filenames: List[str]):
 
 
 class BenchData(Dataset):
-    def __init__(self, basedir: str, steps: List[int], patch_size: int = 3, overlap: int = 1,
-                 dev: torch.device = 'cpu'):
+    def __init__(self, basedir: str, steps: List[int], dev: torch.device = 'cpu'):
         self.velocities = read_velocities([f"{basedir}v.{n:05}.vtk" for n in steps]).to(dev)
         self.data = self.velocities[:-1] * 1e4
         self.label = self.velocities[1:] * 1e4 - self.data
@@ -59,16 +58,27 @@ class BenchData(Dataset):
         self.v_o[:, 0] = .01 * (y / 250 - 1) * 1e-3
         self.v_o[:, 1] = .01 * (1 - x / 250) * 1e-3
 
+    def retrieve(self, index) -> T_co:
+        return (self.data[index], self.H[index], self.A[index], self.v_a[index],
+                self.v_o[index], self.label[index])
+
+    def __getitem__(self, index) -> T_co:
+        return self.retrieve(index)
+
+    def __len__(self) -> int:
+        return len(self.data)
+
+
+class PatchData(BenchData):
+    def __init__(self, basedir: str, steps: List[int], patch_size: int = 3, overlap: int = 1,
+                 dev: torch.device = 'cpu'):
+        super().__init__(basedir, steps, dev)
         self.data_t, self.H_t, self.A_t, self.v_a_t, self.v_o_t, self.border_chunks, self.label_t = transform_data(
             self.data, self.H, self.A, self.v_a, self.v_o, self.label, patch_size, overlap)
 
     def __getitem__(self, index) -> T_co:
         return (self.data_t[index], self.H_t[index], self.A_t[index], self.v_a_t[index],
                 self.v_o_t[index], self.border_chunks[index], self.label_t[index])
-
-    def retrieve(self, index) -> T_co:
-        return (self.data[index], self.H[index], self.A[index], self.v_a[index],
-                self.v_o[index], self.label[index])
 
     def __len__(self) -> int:
         return len(self.data_t)
