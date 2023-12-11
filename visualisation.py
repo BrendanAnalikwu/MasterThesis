@@ -18,7 +18,7 @@ def plot_comparison(model: torch.nn.Module, dataset: BenchData, i: int, channel:
     d = transform_data(*dataset.retrieve(i), patch_size, overlap)
     model.eval()
     num_chunks = int(255 / patch_size)
-    output = model(d[0])[:num_chunks ** 2]
+    output = model(*d[:-1])[:num_chunks ** 2]
     res = make_grid(output, num_chunks, padding=0).detach()
     model.train()
 

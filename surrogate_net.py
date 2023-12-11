@@ -14,7 +14,9 @@ class PatchNet(torch.nn.Module):
         self.n_hidden = n_hidden
         self.complexity = complexity
 
-        self.input_layer_v = torch.nn.Conv2d(2, n_hidden[0], 3, 1, 0, bias=False)  # -> -2
+        self.input_layer_v = torch.nn.Conv2d(6, n_hidden[0], 3, 1, 0, bias=False)  # -> -2
+        self.input_layer_HA = torch.nn.Conv2d(2, n_hidden[0], 2, 1, 0, bias=False)  # -> -1
+        self.input_layer_border = torch.nn.Linear(1, n_hidden[0], bias=True)  # -> 16x1x1
         self.input_activation = torch.nn.Sequential(torch.nn.BatchNorm2d(n_hidden[0]), torch.nn.GELU())
 
         self.encoder = torch.nn.Sequential(torch.nn.Conv2d(n_hidden[0], n_hidden[1], 3, 1, 0),
@@ -49,7 +51,9 @@ class PatchNet(torch.nn.Module):
                                            torch.nn.ConvTranspose2d(n_hidden[1], 2, 3, 1, 1))
 
     def forward(self, v, H=None, A=None, v_a=None, v_o=None, border=None):
-        x = self.input_activation(self.input_layer_v(v))
+        x = self.input_activation(self.input_layer_v(torch.cat((v, v_a, v_o), 1))
+                                  + self.input_layer_HA(torch.cat((H, A), 1))
+                                  + self.input_layer_border(border).transpose(1, 3))
         x1 = self.encoder(x)
         x2 = self.decoder(x1)
         return x2
