@@ -104,7 +104,7 @@ if __name__ == "__main__":
     if os.path.isfile(f'full_dataset.data'):
         dataset = torch.load(f'full_dataset.data')
     else:
-        dataset = BenchData(data_path, list(range(70, 97)), dev=dev)
+        dataset = BenchData(data_path, list(range(1, 97)), dev=dev)
         if save_dataset:
             torch.save(dataset, f'full_dataset.data')
 
