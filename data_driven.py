@@ -99,7 +99,7 @@ if __name__ == "__main__":
 
     dev = torch.device('cuda') if torch.cuda.is_available() else torch.device('cpu')
 
-    model = SurrogateNet(hidden, complexity).to(dev)
+    model = SurrogateNet().to(dev)
 
     if os.path.isfile(f'full_dataset.data'):
         dataset = torch.load(f'full_dataset.data')
