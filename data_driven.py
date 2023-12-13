@@ -63,14 +63,13 @@ def train(model, dataset, dev, n_steps=128, strain_weight=1, job_id=None):
 
     from datetime import datetime
     stamp = datetime.now().strftime('%m%d%H%M%S')
-    model_id = f"{model.out_size}-{model.overlap}-{model.n_hidden}-{model.complexity}-{n_steps}_{stamp}".replace(' ', '')
+    model_id = f"{n_steps}_{stamp}".replace(' ', '')
     if job_id:
         model_id += f"_{job_id}"
     torch.save(model.cpu(), f'model_{model_id}.pt')
     results = {'loss': losses, 'mean': mean_losses, 'std': std_losses, 'contrast': contrast_losses,
                'classic': classic_losses, 'strain': strain_losses}
     torch.save(results, f'losses_{model_id}.li')
-    print(model.encoder[0].weight[0,0])
 
     return model, results
 

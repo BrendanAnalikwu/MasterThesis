@@ -77,7 +77,7 @@ class SurrogateNet(torch.nn.Module):
                                            torch.nn.GELU())
         self.bottleneck = torch.nn.Sequential(torch.nn.Flatten(1, -1),
                                               torch.nn.Linear(1024, 1024),
-                                              torch.nn.BatchNorm2d(128),
+                                              # torch.nn.BatchNorm2d(128),
                                               torch.nn.GELU(),
                                               torch.nn.Unflatten(1, (1024, 1, 1))
                                               )
