@@ -4,7 +4,7 @@ import torch
 from torch.utils.data import DataLoader
 # from tqdm import trange
 
-from dataset import BenchData
+from dataset import FourierData
 from loss import strain_rate_loss
 from surrogate_net import SurrogateNet
 # from visualisation import plot_comparison, plot_losses
@@ -13,7 +13,7 @@ from surrogate_net import SurrogateNet
 
 
 def train(model, dataset, dev, n_steps=128, strain_weight=1, job_id=None):
-    dataloader = DataLoader(dataset, batch_size=ceil(len(dataset) / 10), shuffle=True)
+    dataloader = DataLoader(dataset, batch_size=max(8, ceil(len(dataset) / 10)), shuffle=True)
 
     criterion = torch.nn.MSELoss().to(dev)
     structure_criterion = torch.nn.MSELoss().to(dev)
@@ -91,9 +91,9 @@ if __name__ == "__main__":
         if len(sys.argv) == 10:
             job_id = sys.argv[9]
     else:
-        data_path = 'C:\\Users\\Brend\\Thesis\\GAS\\seaice\\benchmark\\Results8\\'
+        data_path = 'C:\\Users\\Brend\\PycharmProjects\\MasterThesis\\data\\data\\'
         hidden = (1, 2, 3)
-        save_dataset = True
+        save_dataset = False
         n_steps = 128
 
     dev = torch.device('cuda') if torch.cuda.is_available() else torch.device('cpu')
@@ -103,7 +103,7 @@ if __name__ == "__main__":
     if os.path.isfile(f'full_dataset.data'):
         dataset = torch.load(f'full_dataset.data')
     else:
-        dataset = BenchData(data_path, list(range(1, 97)), dev=dev)
+        dataset = FourierData(data_path, dev=dev)
         if save_dataset:
             torch.save(dataset, f'full_dataset.data')
 

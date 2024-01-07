@@ -79,9 +79,7 @@ def plot_experiments_loss(experiments: List[str], loss_type: str = 'classic', la
 
 
 if __name__ == "__main__":
-    print('plotting results')
     plot_results('arch', [3, 5], [1, 2, 3, 4, 5, 6, 7])
     plot_results('arch', [5], [2, 3, 4, 5, 6, 7], c=1)
     plot_results('arch', [5], [2, 3, 4, 5, 6, 7], c=1, h=32)
     plot_results('arch', [5], [1, 2, 3, 4, 5, 6, 7], c=0, h=8)
-    print('done')

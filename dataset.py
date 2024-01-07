@@ -1,3 +1,5 @@
+import os
+from abc import ABC
 from math import cos, sin, pi, sqrt
 from typing import List
 
@@ -28,11 +30,106 @@ def read_HA(filenames: List[str]):
     return H, A
 
 
-class BenchData(Dataset):
+class SeaIceDataset(Dataset, ABC):
+    data: torch.Tensor
+    H: torch.Tensor
+    A: torch.Tensor
+    v_a: torch.Tensor
+    v_o: torch.Tensor
+    label: torch.Tensor
+
+    def retrieve(self, index) -> T_co:
+        return (self.data[index], self.H[index], self.A[index], self.v_a[index],
+                self.v_o[index], self.label[index])
+
+    def __getitem__(self, index) -> T_co:
+        return self.retrieve(index)
+
+    def __len__(self) -> int:
+        return len(self.data)
+
+    @staticmethod
+    def scale_velocity(v: torch.Tensor) -> torch.Tensor:
+        return v * 1e4
+
+
+class FourierData(SeaIceDataset):
+    def __init__(self, basedir: str, dev: torch.device = 'cpu'):
+        dirs = [basedir + d + "\\" for d in os.listdir(basedir)]
+        self.data = SeaIceDataset.scale_velocity(read_velocities([d + "v0.00000.vtk" for d in dirs])).to(dev)
+        self.label = SeaIceDataset.scale_velocity(read_velocities([d + "v.00001.vtk" for d in dirs])).to(dev)
+        self.H, self.A = read_HA([d + "dgh.00001.vtk" for d in dirs])
+        self.H = self.H.to(dev)
+        self.A = self.A.to(dev)
+
+        self.v_a = torch.empty_like(self.data)
+        self.v_o = torch.empty_like(self.data)
+
+        x, y = torch.meshgrid(torch.linspace(0, 512, 257), torch.linspace(0, 512, 257), indexing='ij')
+        x = x.reshape(1, 257, 257) / 1e3
+        y = y.reshape(1, 257, 257) / 1e3
+
+        for i in range(len(self.data)):
+            coef = dict()
+            f = open(dirs[i] + "coef.param")
+            while f.readline().rstrip() != '//Block Coefficients':
+                pass
+            while True:
+                line = f.readline()
+                if line == '\n':
+                    continue
+                elif line == '' or line == '//Block Nix\n':
+                    break
+
+                words = line.rstrip().split()
+                if len(words) == 2:  # Float
+                    coef[words[0]] = float(words[1])
+                elif len(words) > 2:  # List
+                    coef[words[0]] = [float(x) for x in words[2:]]
+            f.close()
+
+            self.v_a[i, 0] = self.fourier_sum_xy(coef, 'Wx', x, y)
+            self.v_a[i, 1] = self.fourier_sum_xy(coef, 'Wy', x, y)
+            self.v_o[i, 0] = self.fourier_sum_xy(coef, 'Ox', x, y)
+            self.v_o[i, 1] = self.fourier_sum_xy(coef, 'Oy', x, y)
+
+        # Scale
+        self.v_a = self.scale_velocity(self.v_a) * 1e-2
+        self.v_o = self.scale_velocity(self.v_o) * 1e1
+
+    @staticmethod
+    def fourier_sum_xy(coef: dict, var: str, x: torch.Tensor, y: torch. Tensor):
+        i_x_c = coef[var + '_i_x_c']
+        c_x_c = coef[var + '_x_c']
+        i_x_s = coef[var + '_i_x_s']
+        c_x_s = coef[var + '_x_s']
+        i_y_c = coef[var + '_i_y_c']
+        c_y_c = coef[var + '_y_c']
+        i_y_s = coef[var + '_i_y_s']
+        c_y_s = coef[var + '_y_s']
+        lb = coef[var + '_min']
+        ub = coef[var + '_max']
+
+        sigma = (sum([abs(c) for c in c_x_c]) + sum([abs(c) for c in c_x_s])) * (
+                    sum([abs(c) for c in c_y_c]) + sum([abs(c) for c in c_y_s]))
+        scaling = (ub - lb) / (2 * sigma)
+        intercept = (ub - lb) / 2 + lb
+
+        res_x = torch.stack([c_x_c[i] * torch.cos(i_x_c[i] * x) for i in range(len(i_x_c))]).sum(dim=0)
+        res_x += torch.stack([c_x_s[i] * torch.sin(i_x_s[i] * x) for i in range(len(i_x_s))]).sum(dim=0)
+        res_y = torch.stack([c_y_c[i] * torch.cos(i_y_c[i] * y) for i in range(len(i_y_c))]).sum(dim=0)
+        res_y += torch.stack([c_y_s[i] * torch.sin(i_y_s[i] * y) for i in range(len(i_y_s))]).sum(dim=0)
+        res = res_x * res_y
+        res *= scaling
+        res += intercept
+        return res
+
+
+class BenchData(SeaIceDataset):
     def __init__(self, basedir: str, steps: List[int], dev: torch.device = 'cpu'):
         self.velocities = read_velocities([f"{basedir}v.{n:05}.vtk" for n in steps]).to(dev)
-        self.data = self.velocities[:-1] * 1e4
-        self.label = self.velocities[1:] * 1e4 - self.data
+        self.data = SeaIceDataset.scale_velocity(self.velocities[:-1])
+        self.label = SeaIceDataset.scale_velocity(self.velocities[1:]) - self.data
 
         self.H, self.A = read_HA([f"{basedir}dgh.{n:05}.vtk" for n in steps[:-1]])
         self.H = self.H.to(dev)
@@ -52,21 +149,11 @@ class BenchData(Dataset):
         self.v_a = torch.empty_like(self.data)
         self.v_a[:, 0, :, :] = (cos(alpha) * (x - midpoint) + sin(alpha) * (y - midpoint)) * s * ws * 15  # m/s
         self.v_a[:, 1, :, :] = (-sin(alpha) * (x - midpoint) + cos(alpha) * (y - midpoint)) * s * ws * 15
-        self.v_a = -self.v_a * 1e-1  # correct scaling should be *1e-3 and then *1e4
+        self.v_a = -self.v_a * 1e-1  # scaling with *1e-3(dimensionless) *1e4(velocity correction) *1e-2 (typical size)
 
         self.v_o = torch.empty_like(self.data)
-        self.v_o[:, 0] = .01 * (y / 250 - 1) * 1e-3
-        self.v_o[:, 1] = .01 * (1 - x / 250) * 1e-3
-
-    def retrieve(self, index) -> T_co:
-        return (self.data[index], self.H[index], self.A[index], self.v_a[index],
-                self.v_o[index], self.label[index])
-
-    def __getitem__(self, index) -> T_co:
-        return self.retrieve(index)
-
-    def __len__(self) -> int:
-        return len(self.data)
+        self.v_o[:, 0] = .01 * (y / 250 - 1) * 1e2  # scaling with *1e-3(dimensionless) *1e4(velocity correction) *1e1 (typical size)
+        self.v_o[:, 1] = .01 * (1 - x / 250) * 1e2
 
 
 class PatchData(BenchData):
