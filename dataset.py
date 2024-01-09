@@ -55,7 +55,7 @@ class SeaIceDataset(Dataset, ABC):
 
 class FourierData(SeaIceDataset):
     def __init__(self, basedir: str, dev: torch.device = 'cpu'):
-        dirs = [basedir + d + "\\" for d in os.listdir(basedir)]
+        dirs = [basedir + d + "/" for d in os.listdir(basedir) if os.path.isdir(os.path.join(basedir, d))]
         self.data = SeaIceDataset.scale_velocity(read_velocities([d + "v0.00000.vtk" for d in dirs])).to(dev)
         self.label = SeaIceDataset.scale_velocity(read_velocities([d + "v.00001.vtk" for d in dirs])).to(dev)
         self.H, self.A = read_HA([d + "dgh.00001.vtk" for d in dirs])

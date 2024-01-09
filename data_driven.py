@@ -100,12 +100,7 @@ if __name__ == "__main__":
 
     model = SurrogateNet().to(dev)
 
-    if os.path.isfile(f'full_dataset.data'):
-        dataset = torch.load(f'full_dataset.data')
-    else:
-        dataset = FourierData(data_path, dev=dev)
-        if save_dataset:
-            torch.save(dataset, f'full_dataset.data')
+    dataset = FourierData(data_path, dev=dev)
 
     model, results = train(model, dataset, dev, n_steps, strain_weight, job_id)
 
