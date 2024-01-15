@@ -10,23 +10,19 @@ import numpy as np
 from matplotlib.colors import SymLogNorm
 from torchvision.utils import make_grid
 
-from dataset import transform_data, BenchData
+from dataset import transform_data, BenchData, SeaIceDataset
 
 
-def plot_comparison(model: torch.nn.Module, dataset: BenchData, i: int, channel: int = 0, patch_size: int = 3,
+def plot_comparison(model: torch.nn.Module, dataset: BenchData, i: int = 0, channel: int = 0, patch_size: int = 3,
                     overlap: int = 1):
-    d = transform_data(*dataset.retrieve(i), patch_size, overlap)
     model.eval()
-    num_chunks = int(255 / patch_size)
-    output = model(*d[:-1])[:num_chunks ** 2]
-    res = make_grid(output, num_chunks, padding=0).detach()
-    model.train()
+    output = model(*dataset[i:(i+1)][:-1]).detach()
 
     fig, ax = plt.subplots(1, 2)
-    vmin = min(res[channel].min(), dataset.label[i, channel].min())
-    vmax = max(res[channel].max(), dataset.label[i, channel].max())
+    vmin = min(output[channel].min(), dataset.label[i, channel].min())
+    vmax = max(output[channel].max(), dataset.label[i, channel].max())
 
-    im = ax[0].imshow(res.cpu()[channel], norm=SymLogNorm(linthresh=1e-2, linscale=1, vmin=vmin, vmax=vmax, base=10))
+    im = ax[0].imshow(output.cpu()[0][channel], norm=SymLogNorm(linthresh=1e-2, linscale=1, vmin=vmin, vmax=vmax, base=10))
     ax[1].imshow(dataset.label[i, channel].cpu(), norm=SymLogNorm(linthresh=1e-2, linscale=1, vmin=vmin, vmax=vmax, base=10))
     fig.tight_layout()
     fig.subplots_adjust(right=.85)
@@ -76,6 +72,21 @@ def plot_experiments_loss(experiments: List[str], loss_type: str = 'classic', la
     plt.bar(experiments, mean)
     for i, exp in enumerate(experiments):
         plt.scatter([i] * len(res[exp]), res[exp], c='k')
+
+
+def load_model(exp: str, i: int):
+    if exp[-3:] == '.pt':
+        return torch.load('experiments/' + exp)
+    else:
+        fn = ['experiments/' + exp + '/' + f for f in os.listdir('experiments/' + exp) if f[-3:] == '.pt']
+        return torch.load(fn[i])
+
+
+def plot_model_output(model: torch.nn.Module, dataset: SeaIceDataset, i: int = 0, dim: int = 0):
+    plt.figure()
+    output = model(*dataset[i:(i+1)][:-1]).detach().cpu()[0, dim]
+    plt.imshow(output, norm=SymLogNorm(linthresh=1e-2, linscale=1, base=10))
+    plt.show()
 
 
 if __name__ == "__main__":

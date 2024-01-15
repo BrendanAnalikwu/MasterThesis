@@ -19,7 +19,7 @@ def train(model, dataset, dev, n_steps=128, strain_weight=1, job_id=None):
     structure_criterion = torch.nn.MSELoss().to(dev)
     inst_norm = torch.nn.InstanceNorm2d(2).to(dev)
     optim = torch.optim.Adam(model.parameters(), lr=1e-4)
-    scheduler = torch.optim.lr_scheduler.MultiStepLR(optim, milestones=[2000, 10000], gamma=.1)
+    scheduler = torch.optim.lr_scheduler.MultiStepLR(optim, milestones=[5000, 15000], gamma=.1)
     losses = []
     mean_losses = []
     std_losses = []
