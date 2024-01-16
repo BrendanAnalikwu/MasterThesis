@@ -1,6 +1,6 @@
 import os
 from abc import ABC
-from math import cos, sin, pi, sqrt
+from math import cos, sin, pi, sqrt, exp
 from typing import List
 
 import numpy as np
@@ -76,7 +76,7 @@ class FourierData(SeaIceDataset):
                 pass
             while True:
                 line = f.readline()
-                if line == '\n':
+                if line == '\n' or line == '//Block Cyclone\n':
                     continue
                 elif line == '' or line == '//Block Nix\n':
                     break
@@ -88,14 +88,31 @@ class FourierData(SeaIceDataset):
                     coef[words[0]] = [float(x) for x in words[2:]]
             f.close()
 
-            self.v_a[i, 0] = self.fourier_sum_xy(coef, 'Wx', x, y)
-            self.v_a[i, 1] = self.fourier_sum_xy(coef, 'Wy', x, y)
+            self.v_a[i] = self.cyclone(coef, x, y)
             self.v_o[i, 0] = self.fourier_sum_xy(coef, 'Ox', x, y)
             self.v_o[i, 1] = self.fourier_sum_xy(coef, 'Oy', x, y)
 
         # Scale
         self.v_a = self.scale_velocity(self.v_a) * 1e-2
         self.v_o = self.scale_velocity(self.v_o) * 1e1
+
+    @staticmethod
+    def cyclone(coef: dict, x: torch.Tensor, y: torch.Tensor):
+        mx = coef['W_mx']
+        my = coef['W_my']
+        vmax = coef['W_vmax']
+        alpha = coef['W_alpha']
+        r0 = coef['W_r0']
+        cyclone = coef['W_cyclone']
+        ws = 1. if cyclone else -1.
+        c = vmax * ws / r0 / exp(-1.)
+
+        er = torch.exp(-torch.sqrt((x - mx).square() + (y - my).square()) / r0)
+        res = torch.empty(2, *x.shape[-2:])
+        res[0] = c * (cos(alpha) * (x - mx) + sin(alpha) * (y - my)) * er
+        res[1] = c * (-sin(alpha) * (x - mx) + cos(alpha) * (y - my)) * er
+
+        return res
 
     @staticmethod
     def fourier_sum_xy(coef: dict, var: str, x: torch.Tensor, y: torch. Tensor):
