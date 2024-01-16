@@ -2,7 +2,7 @@ import os
 from math import ceil
 import torch
 from torch.utils.data import DataLoader
-# from tqdm import trange
+from tqdm import trange
 
 from dataset import FourierData
 from loss import strain_rate_loss
@@ -13,7 +13,8 @@ from surrogate_net import SurrogateNet
 
 
 def train(model, dataset, dev, n_steps=128, strain_weight=1, job_id=None):
-    dataloader = DataLoader(dataset, batch_size=max(8, ceil(len(dataset) / 10)), shuffle=True)
+    train_dataset, test_dataset = torch.utils.data.random_split(dataset, [.9, .1])
+    dataloader = DataLoader(train_dataset, batch_size=max(8, ceil(len(train_dataset) / 10)), shuffle=True)
 
     criterion = torch.nn.MSELoss().to(dev)
     structure_criterion = torch.nn.MSELoss().to(dev)
@@ -26,8 +27,9 @@ def train(model, dataset, dev, n_steps=128, strain_weight=1, job_id=None):
     contrast_losses = []
     classic_losses = []
     strain_losses = []
+    test_losses = []
 
-    pbar = range(n_steps)
+    pbar = trange(n_steps, mininterval=60.)
     for i in pbar:
         for (data, H, A, v_a, v_o, label) in dataloader:
             # Forward pass and compute output
@@ -59,7 +61,13 @@ def train(model, dataset, dev, n_steps=128, strain_weight=1, job_id=None):
             optim.step()
             torch.cuda.empty_cache()
             scheduler.step()
-        # pbar.set_postfix(loss=losses[-1], contrast_loss=contrast_losses[-1])  # , PINN=PINN_losses[-1])
+
+        model.eval()
+        with torch.no_grad():
+            test_output = model(*test_dataset[:][:-1])
+            test_losses.append(criterion(test_output, test_dataset[:][-1]).item())
+
+        pbar.set_postfix(test_loss=test_losses[-1])
 
     from datetime import datetime
     stamp = datetime.now().strftime('%m%d%H%M%S')
