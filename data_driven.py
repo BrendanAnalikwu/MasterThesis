@@ -75,14 +75,14 @@ def train(model, dataset, dev, n_steps=128, strain_weight=1., job_id=None):
         model.train()
 
         if i % 5 == 0:
-            torch.save(model.cpu(), f'model_{model_id}.pt')
+            torch.save(model, f'model_{model_id}.pt')
             results = {'loss': losses, 'mean': mean_losses, 'std': std_losses, 'contrast': contrast_losses,
                        'classic': classic_losses, 'strain': strain_losses, 'test': test_losses}
             torch.save(results, f'losses_{model_id}.li')
 
         pbar.set_postfix(test_loss=test_losses[-1])
 
-    torch.save(model.cpu(), f'model_{model_id}.pt')
+    torch.save(model, f'model_{model_id}.pt')
     results = {'loss': losses, 'mean': mean_losses, 'std': std_losses, 'contrast': contrast_losses,
                'classic': classic_losses, 'strain': strain_losses}
     torch.save(results, f'losses_{model_id}.li')
