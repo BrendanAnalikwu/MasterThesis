@@ -29,6 +29,12 @@ def train(model, dataset, dev, n_steps=128, strain_weight=1, job_id=None):
     strain_losses = []
     test_losses = []
 
+    from datetime import datetime
+    stamp = datetime.now().strftime('%m%d%H%M%S')
+    model_id = f"{n_steps}_{stamp}".replace(' ', '')
+    if job_id:
+        model_id += f"_{job_id}"
+
     pbar = trange(n_steps, mininterval=60.)
     for i in pbar:
         for (data, H, A, v_a, v_o, label) in dataloader:
@@ -66,14 +72,16 @@ def train(model, dataset, dev, n_steps=128, strain_weight=1, job_id=None):
         with torch.no_grad():
             test_output = model(*test_dataset[:][:-1])
             test_losses.append(criterion(test_output, test_dataset[:][-1]).item())
+        model.train()
+
+        if i % 5 == 0:
+            torch.save(model.cpu(), f'model_{model_id}.pt')
+            results = {'loss': losses, 'mean': mean_losses, 'std': std_losses, 'contrast': contrast_losses,
+                       'classic': classic_losses, 'strain': strain_losses}
+            torch.save(results, f'losses_{model_id}.li')
 
         pbar.set_postfix(test_loss=test_losses[-1])
 
-    from datetime import datetime
-    stamp = datetime.now().strftime('%m%d%H%M%S')
-    model_id = f"{n_steps}_{stamp}".replace(' ', '')
-    if job_id:
-        model_id += f"_{job_id}"
     torch.save(model.cpu(), f'model_{model_id}.pt')
     results = {'loss': losses, 'mean': mean_losses, 'std': std_losses, 'contrast': contrast_losses,
                'classic': classic_losses, 'strain': strain_losses}
