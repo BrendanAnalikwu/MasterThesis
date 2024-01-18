@@ -19,10 +19,10 @@ def plot_comparison(model: torch.nn.Module, dataset: BenchData, i: int = 0, chan
     output = model(*dataset[i:(i+1)][:-1]).detach()
 
     fig, ax = plt.subplots(1, 2)
-    vmin = min(output[channel].min(), dataset.label[i, channel].min())
-    vmax = max(output[channel].max(), dataset.label[i, channel].max())
+    vmin = min(output[0, channel].min(), dataset.label[i, channel].min())
+    vmax = max(output[0, channel].max(), dataset.label[i, channel].max())
 
-    im = ax[0].imshow(output.cpu()[0][channel], norm=SymLogNorm(linthresh=1e-2, linscale=1, vmin=vmin, vmax=vmax, base=10))
+    im = ax[0].imshow(output.cpu()[0, channel], norm=SymLogNorm(linthresh=1e-2, linscale=1, vmin=vmin, vmax=vmax, base=10))
     ax[1].imshow(dataset.label[i, channel].cpu(), norm=SymLogNorm(linthresh=1e-2, linscale=1, vmin=vmin, vmax=vmax, base=10))
     fig.tight_layout()
     fig.subplots_adjust(right=.85)
@@ -85,7 +85,7 @@ def load_model(exp: str, i: int):
 def plot_model_output(model: torch.nn.Module, dataset: SeaIceDataset, i: int = 0, dim: int = 0):
     plt.figure()
     output = model(*dataset[i:(i+1)][:-1]).detach().cpu()[0, dim]
-    plt.imshow(output, norm=SymLogNorm(linthresh=1e-2, linscale=1, base=10))
+    plt.imshow(output)#, norm=SymLogNorm(linthresh=1e-2, linscale=1, base=10))
     plt.show()
 
 
