@@ -12,7 +12,7 @@ from surrogate_net import SurrogateNet
 # from dataset import transform_data
 
 
-def train(model, dataset, dev, n_steps=128, strain_weight=1, job_id=None):
+def train(model, dataset, dev, n_steps=128, strain_weight=1., job_id=None):
     train_dataset, test_dataset = torch.utils.data.random_split(dataset, [.9, .1])
     dataloader = DataLoader(train_dataset, batch_size=max(8, ceil(len(train_dataset) / 10)), shuffle=True)
 
