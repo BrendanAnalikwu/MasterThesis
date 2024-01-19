@@ -4,7 +4,7 @@ import torch
 from torch.utils.data import DataLoader
 from tqdm import trange
 
-from dataset import FourierData
+from dataset import FourierData, SeaIceTransform
 from loss import strain_rate_loss
 from surrogate_net import SurrogateNet
 # from visualisation import plot_comparison, plot_losses
@@ -80,7 +80,7 @@ def train(model, dataset, dev, n_steps=128, strain_weight=1., job_id=None):
                        'classic': classic_losses, 'strain': strain_losses, 'test': test_losses}
             torch.save(results, f'losses_{model_id}.li')
 
-        pbar.set_postfix(test_loss=test_losses[-1])
+        pbar.set_postfix(test_loss=test_losses[-1], refresh=False)
 
     torch.save(model, f'model_{model_id}.pt')
     results = {'loss': losses, 'mean': mean_losses, 'std': std_losses, 'contrast': contrast_losses,
@@ -116,7 +116,7 @@ if __name__ == "__main__":
 
     model = SurrogateNet().to(dev)
 
-    dataset = FourierData(data_path, dev=dev)
+    dataset = FourierData(data_path, SeaIceTransform(), dev=dev)
 
     model, results = train(model, dataset, dev, n_steps, strain_weight, job_id)
 

@@ -1,7 +1,8 @@
 import os
 from abc import ABC
 from math import cos, sin, pi, sqrt, exp
-from typing import List
+from random import randint, getrandbits
+from typing import List, Optional
 
 import numpy as np
 import torch
@@ -37,13 +38,17 @@ class SeaIceDataset(Dataset, ABC):
     v_a: torch.Tensor
     v_o: torch.Tensor
     label: torch.Tensor
+    transform = None
 
     def retrieve(self, index) -> T_co:
         return (self.data[index], self.H[index], self.A[index], self.v_a[index],
                 self.v_o[index], self.label[index])
 
     def __getitem__(self, index) -> T_co:
-        return self.retrieve(index)
+        sample = self.retrieve(index)
+        if self.transform:
+            sample = self.transform(sample)
+        return sample
 
     def __len__(self) -> int:
         return len(self.data)
@@ -53,8 +58,19 @@ class SeaIceDataset(Dataset, ABC):
         return v * 1e4
 
 
+class SeaIceTransform(object):
+    def __call__(self, sample):
+        rotations = randint(0, 3)  # generate a random number of rotations
+        flip = bool(getrandbits(1))
+        if flip:
+            return tuple(x.flip(-1).rot90(rotations, [-2, -1]) for x in sample)
+        else:
+            return tuple(x.rot90(rotations, [-2, -1]) for x in sample)
+
+
 class FourierData(SeaIceDataset):
-    def __init__(self, basedir: str, dev: torch.device = 'cpu'):
+    def __init__(self, basedir: str, transform: Optional[SeaIceTransform] = None, dev: torch.device = 'cpu'):
+        self.transform = transform
         dirs = [basedir + d + "/" for d in os.listdir(basedir) if os.path.isdir(os.path.join(basedir, d))]
         self.data = SeaIceDataset.scale_velocity(read_velocities([d + "v0.00000.vtk" for d in dirs])).to(dev)
         self.label = SeaIceDataset.scale_velocity(read_velocities([d + "v.00001.vtk" for d in dirs])).to(dev)
