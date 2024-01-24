@@ -71,10 +71,11 @@ class SeaIceTransform(object):
 class FourierData(SeaIceDataset):
     def __init__(self, basedir: str, transform: Optional[SeaIceTransform] = None, dev: torch.device = 'cpu'):
         self.transform = transform
-        dirs = [basedir + d + "/" for d in os.listdir(basedir) if os.path.isdir(os.path.join(basedir, d))]
-        self.data = SeaIceDataset.scale_velocity(read_velocities([d + "v0.00000.vtk" for d in dirs])).to(dev)
-        self.label = SeaIceDataset.scale_velocity(read_velocities([d + "v.00001.vtk" for d in dirs])).to(dev)
-        self.H, self.A = read_HA([d + "dgh.00001.vtk" for d in dirs])
+        dirs = [os.path.join(basedir, s, d) for s in os.listdir(basedir) if os.path.isdir(os.path.join(basedir, s)) for
+                d in os.listdir(os.path.join(basedir, s)) if os.path.isdir(os.path.join(basedir, s, d))]
+        self.data = SeaIceDataset.scale_velocity(read_velocities([os.path.join(d, "v0.00000.vtk") for d in dirs])).to(dev)
+        self.label = SeaIceDataset.scale_velocity(read_velocities([os.path.join(d, "v.00001.vtk") for d in dirs])).to(dev)
+        self.H, self.A = read_HA([os.path.join(d, "dgh.00001.vtk") for d in dirs])
         self.H = self.H.to(dev)
         self.A = self.A.to(dev)
 
@@ -87,7 +88,7 @@ class FourierData(SeaIceDataset):
 
         for i in range(len(self.data)):
             coef = dict()
-            f = open(dirs[i] + "coef.param")
+            f = open(os.path.join(dirs[i], "coef.param"))
             while f.readline().rstrip() != '//Block Coefficients':
                 pass
             while True:

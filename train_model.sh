@@ -1,7 +1,6 @@
 #!/bin/bash
 #SBATCH --job-name="global_surrogate"
-#SBATCH --partition=gpu
-#SBATCH --gpus=1
+#SBATCH --partition=compute
 #SBATCH --mem=20G
 #SBATCH --time=400 # default in minutes
 #SBATCH --account=education-eemcs-msc-am

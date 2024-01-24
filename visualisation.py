@@ -7,23 +7,26 @@ from typing import List, Tuple, Union, Dict
 import matplotlib.pyplot as plt
 import torch.nn
 import numpy as np
-from matplotlib.colors import SymLogNorm
+from matplotlib.colors import SymLogNorm, Normalize
 from torchvision.utils import make_grid
 
-from dataset import transform_data, BenchData, SeaIceDataset
+from dataset import transform_data, BenchData, SeaIceDataset, SeaIceTransform, FourierData
 
 
-def plot_comparison(model: torch.nn.Module, dataset: BenchData, i: int = 0, channel: int = 0, patch_size: int = 3,
-                    overlap: int = 1):
+def plot_comparison(model: torch.nn.Module, dataset: BenchData, i: int = 0, channel: int = 0, normed: bool = False):
     model.eval()
     output = model(*dataset[i:(i+1)][:-1]).detach()
 
     fig, ax = plt.subplots(1, 2)
     vmin = min(output[0, channel].min(), dataset.label[i, channel].min())
     vmax = max(output[0, channel].max(), dataset.label[i, channel].max())
+    if normed:
+        norm = SymLogNorm(linthresh=1e-2, linscale=1, vmin=vmin, vmax=vmax, base=10)
+    else:
+        norm = Normalize(vmin, vmax)
 
-    im = ax[0].imshow(output.cpu()[0, channel], norm=SymLogNorm(linthresh=1e-2, linscale=1, vmin=vmin, vmax=vmax, base=10))
-    ax[1].imshow(dataset.label[i, channel].cpu(), norm=SymLogNorm(linthresh=1e-2, linscale=1, vmin=vmin, vmax=vmax, base=10))
+    im = ax[0].imshow(output.cpu()[0, channel], norm=norm)
+    ax[1].imshow(dataset.label[i, channel].cpu(), norm=norm)
     fig.tight_layout()
     fig.subplots_adjust(right=.85)
     cbar_ax = fig.add_axes([.9, .15, .03, .7])
@@ -36,6 +39,10 @@ def plot_losses(*args: List, **kwargs):
         plt.semilogy(arg)
     if 'names' in kwargs.keys() and len(kwargs['names']) == len(args):
         plt.legend(kwargs['names'])
+
+
+def plot_all_losses(losses: dict[list]):
+    plot_losses(*losses.values(), names=losses.keys())
 
 
 def plot_results(experiment: str, p: Union[Tuple, List] = (3, 5, 15), o: Union[Tuple, List] = (1, 2, 3, 5, 7, 9),
@@ -74,12 +81,22 @@ def plot_experiments_loss(experiments: List[str], loss_type: str = 'classic', la
         plt.scatter([i] * len(res[exp]), res[exp], c='k')
 
 
-def load_model(exp: str, i: int):
+def load_model(exp: str, i: int, dev='cpu'):
     if exp[-3:] == '.pt':
-        return torch.load('experiments/' + exp)
+        return torch.load('experiments/' + exp).to(dev).eval()
     else:
         fn = ['experiments/' + exp + '/' + f for f in os.listdir('experiments/' + exp) if f[-3:] == '.pt']
+        return torch.load(fn[i]).to(dev).eval()
+
+
+def load_losses(exp: str, i: int = None):
+    if exp[-3:] == '.li':
+        return torch.load('experiments/' + exp)
+    elif i is not None:
+        fn = ['experiments/' + exp + '/' + f for f in os.listdir('experiments/' + exp) if f[-3:] == '.li']
         return torch.load(fn[i])
+    else:
+        raise ValueError("Either give a file name ending in 'li', or a directory and number")
 
 
 def plot_model_output(model: torch.nn.Module, dataset: SeaIceDataset, i: int = 0, dim: int = 0):
@@ -90,7 +107,8 @@ def plot_model_output(model: torch.nn.Module, dataset: SeaIceDataset, i: int = 0
 
 
 if __name__ == "__main__":
-    plot_results('arch', [3, 5], [1, 2, 3, 4, 5, 6, 7])
-    plot_results('arch', [5], [2, 3, 4, 5, 6, 7], c=1)
-    plot_results('arch', [5], [2, 3, 4, 5, 6, 7], c=1, h=32)
-    plot_results('arch', [5], [1, 2, 3, 4, 5, 6, 7], c=0, h=8)
+    dev = torch.device('cpu')
+    dataset = FourierData("C:/Users/Brend/PycharmProjects/MasterThesis/data/data/", dev=dev)
+    benchmark = BenchData("C:/Users/Brend/Thesis/GAS/seaice/benchmark/Results8/", list(range(1, 97)), dev)
+
+    print('done')
