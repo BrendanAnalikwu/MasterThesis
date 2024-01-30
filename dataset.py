@@ -1,5 +1,6 @@
 import os
 from abc import ABC
+from collections import defaultdict
 from math import cos, sin, pi, sqrt, exp
 from random import randint, getrandbits
 from typing import List, Optional
@@ -69,13 +70,22 @@ class SeaIceTransform(object):
 
 
 class FourierData(SeaIceDataset):
+    dt = 2.
+
     def __init__(self, basedir: str, transform: Optional[SeaIceTransform] = None, dev: torch.device = 'cpu'):
         self.transform = transform
-        dirs = [os.path.join(basedir, s, d) for s in os.listdir(basedir) if os.path.isdir(os.path.join(basedir, s)) for
-                d in os.listdir(os.path.join(basedir, s)) if os.path.isdir(os.path.join(basedir, s, d))]
-        self.data = SeaIceDataset.scale_velocity(read_velocities([os.path.join(d, "v0.00000.vtk") for d in dirs])).to(dev)
-        self.label = SeaIceDataset.scale_velocity(read_velocities([os.path.join(d, "v.00001.vtk") for d in dirs])).to(dev)
-        self.H, self.A = read_HA([os.path.join(d, "dgh.00001.vtk") for d in dirs])
+        dirs, fn_c, t = zip(*[(dn, os.path.join(dn, "coef.param"),
+                               list(range(1, 1 + len(list(filter(lambda n: n[:3] == 'dgh', os.listdir(dn))))))) for s in
+                              os.listdir(basedir) if os.path.isdir(subdir := os.path.join(basedir, s)) for d in
+                              os.listdir(subdir) if os.path.isdir(dn := os.path.join(subdir, d))])
+        fn_v, is_label, is_data = zip(*[(os.path.join(d, fn), i != 0, i != (len(fl) - 1)) for d in dirs if
+                                        (fl := list(filter(lambda n: n[0] == 'v', sorted(os.listdir(d))))) for i, fn
+                                        in enumerate(fl)])
+
+        self.velocities = SeaIceDataset.scale_velocity(read_velocities(fn_v)).to(dev)
+        self.data = self.velocities[list(is_data)]
+        self.label = self.velocities[list(is_label)] - self.data
+        self.H, self.A = read_HA([os.path.join(d, fn) for d in dirs for fn in sorted(os.listdir(d)) if fn[:3] == 'dgh'])
         self.H = self.H.to(dev)
         self.A = self.A.to(dev)
 
@@ -86,9 +96,10 @@ class FourierData(SeaIceDataset):
         x = x.reshape(1, 257, 257) / 1e3
         y = y.reshape(1, 257, 257) / 1e3
 
-        for i in range(len(self.data)):
-            coef = dict()
-            f = open(os.path.join(dirs[i], "coef.param"))
+        j = 0
+        for i, fn in enumerate(fn_c):
+            coef = defaultdict(lambda: 0.)
+            f = open(fn)
             while f.readline().rstrip() != '//Block Coefficients':
                 pass
             while True:
@@ -105,18 +116,21 @@ class FourierData(SeaIceDataset):
                     coef[words[0]] = [float(x) for x in words[2:]]
             f.close()
 
-            self.v_a[i] = self.cyclone(coef, x, y)
-            self.v_o[i, 0] = self.fourier_sum_xy(coef, 'Ox', x, y)
-            self.v_o[i, 1] = self.fourier_sum_xy(coef, 'Oy', x, y)
+            ind = slice(j, j + len(t[i]))
+            self.v_a[ind] = self.cyclone(coef, x, y, [self.dt * k for k in t[i]])
+            self.v_o[ind, 0] = self.fourier_sum_xy(coef, 'Ox', x, y)
+            self.v_o[ind, 1] = self.fourier_sum_xy(coef, 'Oy', x, y)
+            j += len(t[i])
 
         # Scale
         self.v_a = self.scale_velocity(self.v_a) * 1e-2
         self.v_o = self.scale_velocity(self.v_o) * 1e1
 
     @staticmethod
-    def cyclone(coef: dict, x: torch.Tensor, y: torch.Tensor):
-        mx = coef['W_mx']
-        my = coef['W_my']
+    def cyclone(coef: dict, x: torch.Tensor, y: torch.Tensor, t: list[float]):
+        t = torch.tensor(t).view(-1, 1, 1)
+        mx = coef['W_mx'] + coef['W_vx_m'] * t
+        my = coef['W_my'] + coef['W_vy_m'] * t
         vmax = coef['W_vmax']
         alpha = coef['W_alpha']
         r0 = coef['W_r0']
@@ -125,9 +139,9 @@ class FourierData(SeaIceDataset):
         c = vmax * ws / r0 / exp(-1.)
 
         er = torch.exp(-torch.sqrt((x - mx).square() + (y - my).square()) / r0)
-        res = torch.empty(2, *x.shape[-2:])
-        res[0] = c * (cos(alpha) * (x - mx) + sin(alpha) * (y - my)) * er
-        res[1] = c * (-sin(alpha) * (x - mx) + cos(alpha) * (y - my)) * er
+        res = torch.empty(len(t), 2, *x.shape[-2:])
+        res[:, 0] = c * (cos(alpha) * (x - mx) + sin(alpha) * (y - my)) * er
+        res[:, 1] = c * (-sin(alpha) * (x - mx) + cos(alpha) * (y - my)) * er
 
         return res
 
