@@ -100,3 +100,93 @@ class SurrogateNet(torch.nn.Module):
         x2 = self.bottleneck(x1)
         x3 = self.decoder(x2)
         return x3
+
+
+class UNet(torch.nn.Module):
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+
+        self.input_layer_v = torch.nn.Conv2d(6, 64, 7, 4, 1, bias=False)  # 257 -> 64
+        self.input_layer_HA = torch.nn.Conv2d(2, 64, 6, 4, 1, bias=False)  # 256 -> 64
+        self.input_activation = torch.nn.Sequential(torch.nn.BatchNorm2d(64), torch.nn.GELU())
+        self.input_conv = torch.nn.Sequential(
+            torch.nn.Conv2d(64, 64, 3, 1, 1, padding_mode='zeros'),
+            torch.nn.BatchNorm2d(64),
+            torch.nn.GELU(),
+            torch.nn.Conv2d(64, 64, 3, 1, 1, padding_mode='zeros'),
+            torch.nn.BatchNorm2d(64),
+            torch.nn.GELU()
+        )
+
+        self.layer1 = UNetLayerDown(64, 128, torch.nn.GELU, torch.nn.BatchNorm2d)  # 64 -> 32
+        self.layer2 = UNetLayerDown(128, 256, torch.nn.GELU, torch.nn.BatchNorm2d)  # 32 -> 16
+        self.layer3 = UNetLayerDown(256, 512, torch.nn.GELU, torch.nn.BatchNorm2d)  # 16 -> 8
+        self.bottleneck = torch.nn.Sequential(
+            torch.nn.Conv2d(512, 1024, 4, 2, 1),
+            torch.nn.BatchNorm2d(1024),
+            torch.nn.GELU(),
+            torch.nn.Conv2d(1024, 1024, 4, 1, 0),
+            torch.nn.ConvTranspose2d(1024, 1024, 4, 1, 0),
+            torch.nn.BatchNorm2d(1024),
+            torch.nn.GELU()
+        )  # 8 -> 4 -> 1 -> 4
+        self.layer4 = UNetLayerUp(1024, 512, torch.nn.GELU, torch.nn.BatchNorm2d)  # 4 -> 8
+        self.layer5 = UNetLayerUp(512, 256, torch.nn.GELU, torch.nn.BatchNorm2d)  # 8 -> 16
+        self.layer6 = UNetLayerUp(256, 128, torch.nn.GELU, torch.nn.BatchNorm2d)  # 16 -> 32
+        self.layer7 = UNetLayerUp(128, 64, torch.nn.GELU, torch.nn.BatchNorm2d)  # 32 -> 64
+        self.output = torch.nn.ConvTranspose2d(64, 2, 7, 4, 1)  # 64 -> 257
+
+    def forward(self,  v, H, A, v_a, v_o):
+        x = self.input_activation(self.input_layer_v(torch.cat((v, v_a, v_o), 1))
+                                  + self.input_layer_HA(torch.cat((H, A), 1)))
+        x1 = self.input_conv(x)
+        x2 = self.layer1(x1)
+        x3 = self.layer2(x2)
+        x4 = self.layer3(x3)
+        x5 = self.bottleneck(x4)
+        x6 = self.layer4(x5, x4)
+        x7 = self.layer5(x6, x3)
+        x8 = self.layer6(x7, x2)
+        x9 = self.layer6(x8, x1)
+        x = self.output(x9)
+        return x
+
+
+class UNetLayerDown(torch.nn.Module):
+    def __init__(self, size_in, size_out, activation, normalization, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.layer = torch.nn.Sequential(
+            torch.nn.Conv2d(size_in, size_out, 4, 2, 1, padding_mode='zeros'),
+            normalization(size_out),
+            activation(),
+            torch.nn.Conv2d(size_out, size_out, 3, 1, 1, padding_mode='zeros'),
+            normalization(size_out),
+            activation(),
+            torch.nn.Conv2d(size_out, size_out, 3, 1, 1, padding_mode='zeros'),
+            normalization(size_out),
+            activation()
+        )
+
+    def forward(self, x: torch.tensor):
+        return self.layer(x)
+
+
+class UNetLayerUp(torch.nn.Module):
+    def __init__(self, size_in, size_out, activation, normalization, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.layer1 = torch.nn.Sequential(
+            torch.nn.ConvTranspose2d(size_in, size_out, 4, 2, 1),
+            normalization(size_out),
+            activation())
+        self.layer2 = torch.nn.Sequential(
+            torch.nn.Conv2d(2 * size_out, size_out, 3, 1, 1, padding_mode='zeros'),
+            normalization(size_out),
+            activation(),
+            torch.nn.Conv2d(size_out, size_out, 3, 1, 1, padding_mode='zeros'),
+            normalization(size_out),
+            activation()
+        )
+
+    def forward(self, x: torch.tensor, skip: torch.tensor):
+        x1 = self.layer1(x)
+        return self.layer2(torch.cat((x1, skip), dim=1))
