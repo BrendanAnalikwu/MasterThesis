@@ -391,3 +391,8 @@ def strain_rate_loss(v: torch.tensor, label: torch.tensor):
         error = error[None]
     e_x, e_y = finite_differences(error, 1.)
     return (e_x[:, 0].square() + .5 * (e_x[:, 1] + e_y[:, 0]).square() + e_y[:, 1].square()).mean()
+
+
+def mean_concentration_loss(dv: torch.tensor, label: torch.Tensor, v_old: torch.Tensor, A: torch.tensor):
+    return (advect((dv + v_old) * 1e-4, A, 2., .5 / 256)
+            - advect((label + v_old) * 1e-4, A, 2., .5 / 256)).square().mean()
