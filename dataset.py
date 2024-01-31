@@ -32,6 +32,11 @@ def read_HA(filenames: List[str]):
     return H, A
 
 
+class CoefficientDict(dict):
+    def __missing__(self, key):
+        return 0. if key[:2] == 'W_' or key[-4:] == '_min' or key[-4] == '_max' else []
+
+
 class SeaIceDataset(Dataset, ABC):
     data: torch.Tensor
     H: torch.Tensor
@@ -98,7 +103,7 @@ class FourierData(SeaIceDataset):
 
         j = 0
         for i, fn in enumerate(fn_c):
-            coef = defaultdict(lambda: 0.)
+            coef = CoefficientDict()
             f = open(fn)
             while f.readline().rstrip() != '//Block Coefficients':
                 pass
