@@ -6,7 +6,9 @@ from tqdm import trange
 
 from dataset import FourierData, SeaIceTransform
 from loss import strain_rate_loss
-from surrogate_net import SurrogateNet
+from surrogate_net import SurrogateNet, UNet
+
+
 # from visualisation import plot_comparison, plot_losses
 # from torchvision.utils import make_grid
 # from dataset import transform_data
@@ -114,7 +116,7 @@ if __name__ == "__main__":
 
     dev = torch.device('cuda') if torch.cuda.is_available() else torch.device('cpu')
 
-    model = SurrogateNet().to(dev)
+    model = UNet().to(dev)
 
     dataset = FourierData(data_path, SeaIceTransform(), dev=dev)
 

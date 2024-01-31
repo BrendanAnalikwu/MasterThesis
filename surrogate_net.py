@@ -147,7 +147,7 @@ class UNet(torch.nn.Module):
         x6 = self.layer4(x5, x4)
         x7 = self.layer5(x6, x3)
         x8 = self.layer6(x7, x2)
-        x9 = self.layer6(x8, x1)
+        x9 = self.layer7(x8, x1)
         x = self.output(x9)
         return x
 
