@@ -5,6 +5,48 @@ import torch
 import torch.utils.data
 
 
+def advect(v: torch.Tensor, H_old: torch.tensor, dt: float, dx: float):
+    """
+    Perform advection step on B-grid.
+
+    Parameters
+    ----------
+    v : torch.Tensor
+        Ice velocity tensor of shape (N, 2, H+1, W+1)
+    H_old : torch.Tensor
+        Quantity to advect as tensor with shape (N, H, W)
+    dt : float
+        Time step
+    dx : float
+        Grid spacing
+
+    Returns
+    -------
+    torch.Tensor
+        Advected quantity
+
+    """
+
+    assert v.dim() == H_old.dim()
+    dH = torch.zeros_like(H_old)
+
+    # x-direction
+    v_x = (v[:, 0:1, 1:-1, 1:] + v[:, 0:1, 1:-1, :-1]) / 2.
+    dH[..., 1:, :] += torch.nn.functional.relu(v_x) * H_old[..., :-1, :] * dt / dx
+    dH[..., :-1, :] -= torch.nn.functional.relu(v_x) * H_old[..., :-1, :] * dt / dx
+    dH[..., :-1, :] += torch.nn.functional.relu(-1 * v_x) * H_old[..., 1:, :] * dt / dx
+    dH[..., 1:, :] -= torch.nn.functional.relu(-1 * v_x) * H_old[..., 1:, :] * dt / dx
+
+    # y-direction
+    v_y = (v[:, 1:, 1:, 1:-1] + v[:, 1:, :-1, 1:-1]) / 2.
+    dH[..., :, 1:] += torch.nn.functional.relu(v_y) * H_old[..., :, :-1] * dt / dx
+    dH[..., :, :-1] -= torch.nn.functional.relu(v_y) * H_old[..., :, :-1] * dt / dx
+    dH[..., :, :-1] += torch.nn.functional.relu(-1 * v_y) * H_old[..., :, 1:] * dt / dx
+    dH[..., :, 1:] -= torch.nn.functional.relu(-1 * v_y) * H_old[..., :, 1:] * dt / dx
+
+    return H_old + dH
+
+
 def delta(vx_x: torch.Tensor, vx_y: torch.Tensor, vy_x: torch.Tensor, vy_y: torch.Tensor, e_2: float = .25,
           dmin: float = 2e-9) -> torch.Tensor:
     """
