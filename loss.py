@@ -1,3 +1,4 @@
+from collections import defaultdict
 from math import sqrt
 from typing import Tuple, Optional
 
@@ -404,3 +405,70 @@ def mean_relative_loss(dv: torch.Tensor, label: torch.Tensor, v: Optional[torch.
     else:
         return ((dv - label).norm(2, -3) / (label.norm(2, -3) + eps)).mean()
 
+
+class Loss(torch.nn.Module):
+    loss_names = ['MSE', 'SRE', 'MSE+SRE', 'MSE+MRE', 'MSE+MRDE']
+
+    def __init__(self, main_loss: str = 'MSE', mre_eps: float = 1e-4, mrde_eps: float = 1e-6, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        assert main_loss in self.loss_names
+        self.main = main_loss
+        self.results = defaultdict(list)
+        self.mre_eps = mre_eps
+        self.mrde_eps = mrde_eps
+
+    def forward(self, dv: torch.Tensor, label: torch.Tensor, v_old: torch.Tensor, A: torch.tensor,
+                store: bool = True, grad: bool = True):
+        with torch.set_grad_enabled('MSE' in self.main and grad):
+            mse = torch.nn.functional.mse_loss(dv, label)
+        with torch.set_grad_enabled('SRE' in self.main and grad):
+            sre = strain_rate_loss(dv, label)
+            msesre = mse + sre
+        with torch.set_grad_enabled('MRE' in self.main and grad):
+            mre = mean_relative_loss(dv, label, v_old, eps=self.mre_eps)
+            msemre = mse + mre
+        with torch.set_grad_enabled('MRDE' in self.main and grad):
+            mrde = mean_relative_loss(dv, label, eps=self.mrde_eps)
+            msemrde = mse + mrde
+
+        with torch.no_grad():
+            mce = mean_concentration_loss(dv, label, v_old, A)
+
+        if store:
+            self.results['MSE'].append(mse.item())
+            self.results['SRE'].append(sre.item())
+            self.results['MSE+SRE'].append(msesre.item())
+            self.results['MSE+MRE'].append(msemre.item())
+            self.results['MSE+MRDE'].append(msemrde.item())
+
+            self.results['MRE'].append(mre.item())
+            self.results['MRDE'].append(mrde.item())
+
+            self.results['MCE'].append(mce.item())
+
+        if self.main == 'MSE':
+            return mse
+        elif self.main == 'SRE':
+            return sre
+        elif self.main == 'MSE+SRE':
+            return msesre
+        elif self.main == 'MSE+MRE':
+            return msemre
+        elif self.main == 'MSE+MRDE':
+            return msemrde
+        elif self.main == 'MCE':
+            return mce
+
+    def validate(self, dv: torch.Tensor, label: torch.Tensor, v_old: torch.Tensor, A: torch.tensor, store: bool = True):
+        with torch.no_grad():
+            mse = torch.nn.functional.mse_loss(dv, label)
+            sre = strain_rate_loss(dv, label)
+            mre = mean_relative_loss(dv, label, v_old, eps=self.mre_eps)
+            mrde = mean_relative_loss(dv, label, eps=self.mrde_eps)
+            mce = mean_concentration_loss(dv, label, v_old, A)
+
+            msesre = mse + sre
+            msemre = mse + mre
+            msemrde = mse + mrde
+        return {'MSE': mse, 'SRE': sre, 'MSE+SRE': msesre, 'MSE+MRE': msemre, 'MSE+MRDE': msemrde, 'MRE': mre,
+                'MRDE': mrde, 'MCE': mce}

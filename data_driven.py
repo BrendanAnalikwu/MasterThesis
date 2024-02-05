@@ -1,11 +1,13 @@
-import os
 from math import ceil
+import torch
+from math import ceil
+
 import torch
 from torch.utils.data import DataLoader
 from tqdm import trange
 
 from dataset import FourierData, SeaIceTransform
-from loss import strain_rate_loss, mean_concentration_loss, mean_relative_loss
+from loss import Loss
 from surrogate_net import SurrogateNet, UNet
 
 
@@ -14,26 +16,22 @@ from surrogate_net import SurrogateNet, UNet
 # from dataset import transform_data
 
 
-def train(model, dataset, dev, n_steps=128, strain_weight=1., job_id=None):
+def train(model, dataset, dev, n_steps=128, main_loss='MSE', job_id=None):
     train_dataset, test_dataset = torch.utils.data.random_split(dataset, [.9, .1])
     dataloader = DataLoader(train_dataset, batch_size=max(8, ceil(len(train_dataset) / 10)), shuffle=True)
 
-    criterion = torch.nn.MSELoss().to(dev)
+    criterion = Loss(main_loss).to(dev)
+    test_criterion = Loss(main_loss).to(dev)
     optim = torch.optim.Adam(model.parameters(), lr=1e-4)
     scheduler = torch.optim.lr_scheduler.MultiStepLR(optim, milestones=[120000, 170000], gamma=.1)
-    losses = []
-    classic_losses = []
-    strain_losses = []
-    test_losses = []
-    MCE_losses = []
-    MRE_losses = []
-    MRE_full_losses = []
 
-    from datetime import datetime
-    stamp = datetime.now().strftime('%m%d%H%M%S')
-    model_id = f"{n_steps}_{stamp}".replace(' ', '')
+    model_id = f"{model.__class__.__name__}_{main_loss}"
     if job_id:
         model_id += f"_{job_id}"
+    else:
+        from datetime import datetime
+        stamp = datetime.now().strftime('%m%d%H%M%S')
+        model_id += f"_{stamp}".replace(' ', '')
 
     pbar = trange(n_steps, mininterval=60.)
     for i in pbar:
@@ -42,21 +40,7 @@ def train(model, dataset, dev, n_steps=128, strain_weight=1., job_id=None):
             output = model(data, H, A, v_a, v_o)
 
             # Compute losses
-            classic_loss = criterion(output, label)
-            strain_loss = strain_rate_loss(output, label)
-            loss = classic_loss + strain_weight * strain_loss
-            with torch.no_grad():
-                MCE_loss = mean_concentration_loss(output, label, data, A)
-                MRE_loss = mean_relative_loss(output, label)
-                MRE_full_loss = mean_relative_loss(output, label, data)
-
-            # Store losses
-            losses.append(loss.item())
-            classic_losses.append(classic_loss.item())
-            strain_losses.append(strain_loss.item())
-            MCE_losses.append(MCE_loss.item())
-            MRE_losses.append(MRE_loss.item())
-            MRE_full_losses.append(MRE_full_loss.item())
+            loss = criterion(output, label, data, A, store=True)
 
             # Gradient computation and optimiser step
             loss.backward()
@@ -68,54 +52,42 @@ def train(model, dataset, dev, n_steps=128, strain_weight=1., job_id=None):
         model.eval()
         with torch.no_grad():
             test_output = model(*test_dataset[:][:-1])
-            test_losses.append(criterion(test_output, test_dataset[:][-1]).item())
+            test_loss = test_criterion(test_output, test_dataset[:][-1], test_dataset[:][0], test_dataset[:][2],
+                                       store=True, grad=False)
         model.train()
 
         if i % 5 == 0:
             torch.save(model, f'model_{model_id}.pt')
-            results = {'loss': losses, 'classic': classic_losses, 'strain': strain_losses, 'test': test_losses,
-                       'concentration': MCE_losses, 'relative': MRE_losses, 'relative_full': MRE_full_losses}
-            torch.save(results, f'losses_{model_id}.li')
+            torch.save(criterion.results, f'losses_{model_id}.li')
+            torch.save(test_criterion.results, f'test_losses_{model_id}.li')
 
-        pbar.set_postfix(test_loss=test_losses[-1], refresh=False)
+        pbar.set_postfix(test_loss=test_loss.item(), refresh=False)
 
     torch.save(model, f'model_{model_id}.pt')
-    results = {'loss': losses, 'classic': classic_losses, 'strain': strain_losses,
-               'MCE': MCE_losses, 'relative': MRE_losses, 'relative_full': MRE_full_losses}
-    torch.save(results, f'losses_{model_id}.li')
+    torch.save(criterion.results, f'losses_{model_id}.li')
+    torch.save(test_criterion.results, f'test_losses_{model_id}.li')
 
-    return model, results
+    return model, criterion.results
 
 
 if __name__ == "__main__":
     import sys
+
     job_id = None
-    complexity = 0
-    strain_weight = 1.
-    if len(sys.argv) >= 9:
-        data_path = (sys.argv[1])
-        # patch_size = int(sys.argv[2])
-        # overlap = int(sys.argv[3])
-        hidden = (int(sys.argv[2]), int(sys.argv[3]), int(sys.argv[4]))
-        complexity = int(sys.argv[5])
-        save_dataset = bool(int(sys.argv[6]))
-        n_steps = int(sys.argv[7])
-        strain_weight = float(sys.argv[8])
-        if len(sys.argv) == 10:
-            job_id = sys.argv[9]
-    else:
-        data_path = 'C:\\Users\\Brend\\PycharmProjects\\MasterThesis\\data\\data\\'
-        hidden = (1, 2, 3)
-        save_dataset = False
-        n_steps = 128
+    data_path = (sys.argv[1])
+    n_steps = int(sys.argv[2])
+    main_loss = str(sys.argv[3])
+    model_name = str(sys.argv[4])  # 'UNet' or else SurrogateNet
+    if len(sys.argv) == 6:
+        job_id = sys.argv[5]
 
     dev = torch.device('cuda') if torch.cuda.is_available() else torch.device('cpu')
 
-    model = UNet().to(dev)
+    model = UNet().to(dev) if model_name == 'UNet' else SurrogateNet().to(dev)
 
     dataset = FourierData(data_path, SeaIceTransform(), dev=dev)
 
-    model, results = train(model, dataset, dev, n_steps, strain_weight, job_id)
+    model, results = train(model, dataset, dev, n_steps, main_loss, job_id)
 
     # # Plot results
     # plot_comparison(model, dataset, 0, 0, patch_size, overlap)
