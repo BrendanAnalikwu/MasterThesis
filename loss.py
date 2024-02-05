@@ -1,5 +1,5 @@
 from math import sqrt
-from typing import Tuple
+from typing import Tuple, Optional
 
 import torch
 import torch.utils.data
@@ -393,6 +393,14 @@ def strain_rate_loss(v: torch.tensor, label: torch.tensor):
     return (e_x[:, 0].square() + .5 * (e_x[:, 1] + e_y[:, 0]).square() + e_y[:, 1].square()).mean()
 
 
-def mean_concentration_loss(dv: torch.tensor, label: torch.Tensor, v_old: torch.Tensor, A: torch.tensor):
+def mean_concentration_loss(dv: torch.Tensor, label: torch.Tensor, v_old: torch.Tensor, A: torch.tensor):
     return (advect((dv + v_old) * 1e-4, A, 2., .5 / 256)
             - advect((label + v_old) * 1e-4, A, 2., .5 / 256)).square().mean()
+
+
+def mean_relative_loss(dv: torch.Tensor, label: torch.Tensor, v: Optional[torch.Tensor] = None, eps: float = 1e-4):
+    if v is not None:
+        return ((dv - label).norm(2, -3) / ((label + v).norm(2, -3) + eps)).mean()
+    else:
+        return ((dv - label).norm(2, -3) / (label.norm(2, -3) + eps)).mean()
+

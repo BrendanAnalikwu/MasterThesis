@@ -5,7 +5,7 @@ from torch.utils.data import DataLoader
 from tqdm import trange
 
 from dataset import FourierData, SeaIceTransform
-from loss import strain_rate_loss, mean_concentration_loss
+from loss import strain_rate_loss, mean_concentration_loss, mean_relative_loss
 from surrogate_net import SurrogateNet, UNet
 
 
@@ -26,6 +26,8 @@ def train(model, dataset, dev, n_steps=128, strain_weight=1., job_id=None):
     strain_losses = []
     test_losses = []
     MCE_losses = []
+    MRE_losses = []
+    MRE_full_losses = []
 
     from datetime import datetime
     stamp = datetime.now().strftime('%m%d%H%M%S')
@@ -45,12 +47,16 @@ def train(model, dataset, dev, n_steps=128, strain_weight=1., job_id=None):
             loss = classic_loss + strain_weight * strain_loss
             with torch.no_grad():
                 MCE_loss = mean_concentration_loss(output, label, data, A)
+                MRE_loss = mean_relative_loss(output, label)
+                MRE_full_loss = mean_relative_loss(output, label, data)
 
             # Store losses
             losses.append(loss.item())
             classic_losses.append(classic_loss.item())
             strain_losses.append(strain_loss.item())
             MCE_losses.append(MCE_loss.item())
+            MRE_losses.append(MRE_loss.item())
+            MRE_full_losses.append(MRE_full_loss.item())
 
             # Gradient computation and optimiser step
             loss.backward()
@@ -68,14 +74,14 @@ def train(model, dataset, dev, n_steps=128, strain_weight=1., job_id=None):
         if i % 5 == 0:
             torch.save(model, f'model_{model_id}.pt')
             results = {'loss': losses, 'classic': classic_losses, 'strain': strain_losses, 'test': test_losses,
-                       'concentration': MCE_losses}
+                       'concentration': MCE_losses, 'relative': MRE_losses, 'relative_full': MRE_full_losses}
             torch.save(results, f'losses_{model_id}.li')
 
         pbar.set_postfix(test_loss=test_losses[-1], refresh=False)
 
     torch.save(model, f'model_{model_id}.pt')
     results = {'loss': losses, 'classic': classic_losses, 'strain': strain_losses,
-               'MCE': MCE_losses}
+               'MCE': MCE_losses, 'relative': MRE_losses, 'relative_full': MRE_full_losses}
     torch.save(results, f'losses_{model_id}.li')
 
     return model, results

@@ -15,7 +15,7 @@ from dataset import transform_data, BenchData, SeaIceDataset, SeaIceTransform, F
 
 def plot_comparison(model: torch.nn.Module, dataset: BenchData, i: int = 0, channel: int = 0, normed: bool = False):
     model.eval()
-    output = model(*dataset[i:(i+1)][:-1]).detach()
+    output = model(*dataset.retrieve(slice(i, i + 1))[:-1]).detach()
 
     fig, ax = plt.subplots(1, 2)
     vmin = min(output[0, channel].min(), dataset.label[i, channel].min())
