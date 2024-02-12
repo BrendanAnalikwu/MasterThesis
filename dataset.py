@@ -12,14 +12,15 @@ from torch.utils.data.dataset import T_co
 from torchvision.utils import make_grid
 from tqdm import trange
 
-from generate_data import read_vtk
+from generate_data import read_vtk2
 
 
 def read_velocities(filenames: List[str]):
     res = torch.zeros((len(filenames), 2, 257, 257))
     for i, fn in zip(trange(len(filenames)), filenames):
-        res[i, 0] = torch.tensor(read_vtk(fn, True, 'u000', indexing='ij').reshape((257, 257)), dtype=torch.float)
-        res[i, 1] = torch.tensor(read_vtk(fn, True, 'u001', indexing='ij').reshape((257, 257)), dtype=torch.float)
+        data = read_vtk2(fn, True, indexing='ij')
+        res[i, 0] = torch.tensor(data[:, 0].reshape((257, 257)), dtype=torch.float)
+        res[i, 1] = torch.tensor(data[:, 1].reshape((257, 257)), dtype=torch.float)
     return res
 
 
@@ -27,8 +28,9 @@ def read_HA(filenames: List[str]):
     H = torch.zeros((len(filenames), 1, 256, 256))
     A = torch.zeros((len(filenames), 1, 256, 256))
     for i, fn in zip(trange(len(filenames)), filenames):
-        H[i] = torch.tensor(read_vtk(fn, False, 'u000', indexing='ij').reshape((1, 256, 256)), dtype=torch.float)
-        A[i] = torch.tensor(read_vtk(fn, False, 'u001', indexing='ij').reshape((1, 256, 256)), dtype=torch.float)
+        data = read_vtk2(fn, False, indexing='ij')
+        H[i] = torch.tensor(data[:, 0].reshape((1, 256, 256)), dtype=torch.float)
+        A[i] = torch.tensor(data[:, 1].reshape((1, 256, 256)), dtype=torch.float)
     return H, A
 
 

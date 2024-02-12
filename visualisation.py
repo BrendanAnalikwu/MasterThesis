@@ -11,6 +11,7 @@ from matplotlib.colors import SymLogNorm, Normalize
 from torchvision.utils import make_grid
 
 from dataset import transform_data, BenchData, SeaIceDataset, SeaIceTransform, FourierData
+from generate_data import read_vtk2
 
 
 def plot_comparison(model: torch.nn.Module, dataset: BenchData, i: int = 0, channel: int = 0, normed: bool = False):
