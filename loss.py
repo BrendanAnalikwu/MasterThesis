@@ -407,9 +407,9 @@ def mean_relative_loss(dv: torch.Tensor, label: torch.Tensor, v: Optional[torch.
 
 
 class Loss(torch.nn.Module):
-    loss_names = ['MSE', 'SRE', 'MSE+SRE', 'MSE+MRE', 'MSE+MRDE']
+    loss_names = ['MSE', 'SRE', 'MSE+SRE', 'MSE+MRE', 'MSE+MRDE', 'MSE+SRE+MRDE']
 
-    def __init__(self, main_loss: str = 'MSE', mre_eps: float = 1e-4, mrde_eps: float = 1e-6, *args, **kwargs):
+    def __init__(self, main_loss: str = 'MSE', mre_eps: float = 1e-2, mrde_eps: float = 1e-2, *args, **kwargs):
         super().__init__(*args, **kwargs)
         assert main_loss in self.loss_names
         self.main = main_loss
@@ -426,10 +426,11 @@ class Loss(torch.nn.Module):
             msesre = mse + sre
         with torch.set_grad_enabled('MRE' in self.main and grad):
             mre = mean_relative_loss(dv, label, v_old, eps=self.mre_eps)
-            msemre = mse + mre
+            msemre = mse + .1 * mre
         with torch.set_grad_enabled('MRDE' in self.main and grad):
             mrde = mean_relative_loss(dv, label, eps=self.mrde_eps)
-            msemrde = mse + mrde
+            msemrde = mse + .01 * mrde
+            msesremrde = mse + sre + .01 * mrde
 
         with torch.no_grad():
             mce = mean_concentration_loss(dv, label, v_old, A)
@@ -440,6 +441,7 @@ class Loss(torch.nn.Module):
             self.results['MSE+SRE'].append(msesre.item())
             self.results['MSE+MRE'].append(msemre.item())
             self.results['MSE+MRDE'].append(msemrde.item())
+            self.results['MSE+SRE+MRDE'].append(msesremrde.item())
 
             self.results['MRE'].append(mre.item())
             self.results['MRDE'].append(mrde.item())
@@ -456,6 +458,8 @@ class Loss(torch.nn.Module):
             return msemre
         elif self.main == 'MSE+MRDE':
             return msemrde
+        elif self.main == 'MSE+SRE+MRDE':
+            return msesremrde
         elif self.main == 'MCE':
             return mce
 
@@ -469,6 +473,7 @@ class Loss(torch.nn.Module):
 
             msesre = mse + sre
             msemre = mse + mre
-            msemrde = mse + mrde
-        return {'MSE': mse, 'SRE': sre, 'MSE+SRE': msesre, 'MSE+MRE': msemre, 'MSE+MRDE': msemrde, 'MRE': mre,
-                'MRDE': mrde, 'MCE': mce}
+            msemrde = mse + .01 * mrde
+            msesremrde = mse + sre + .01 * mrde
+        return {'MSE': mse, 'SRE': sre, 'MSE+SRE': msesre, 'MSE+MRE': msemre, 'MSE+MRDE': msemrde,
+                'MSE+SRE+MRDE': msemrde, 'MRE': mre, 'MRDE': mrde, 'MCE': mce}
