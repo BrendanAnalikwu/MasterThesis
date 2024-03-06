@@ -102,6 +102,60 @@ class SurrogateNet(torch.nn.Module):
         return x3
 
 
+class SmallSurrogateNet(SurrogateNet):
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.input_layer_v = torch.nn.Conv2d(6, 8, 3, 1, 0, bias=False)  # -> -2
+        self.input_layer_HA = torch.nn.Conv2d(2, 8, 2, 1, 0, bias=False)  # -> -1
+        self.input_activation = torch.nn.Sequential(torch.nn.BatchNorm2d(8), torch.nn.GELU())
+
+        self.encoder = torch.nn.Sequential(torch.nn.Conv2d(8, 32, 17, 16, 1),
+                                           torch.nn.BatchNorm2d(32),
+                                           torch.nn.GELU(),
+                                           torch.nn.Conv2d(32, 96, 4, 4, 0),
+                                           torch.nn.BatchNorm2d(96),
+                                           torch.nn.GELU(),
+                                           torch.nn.Conv2d(96, 256, 4, 1, 0),
+                                           torch.nn.BatchNorm2d(256),
+                                           torch.nn.GELU())
+        self.bottleneck = torch.nn.Sequential(torch.nn.Flatten(1, -1),
+                                              torch.nn.Linear(256, 256),
+                                              # torch.nn.BatchNorm2d(128),
+                                              torch.nn.GELU(),
+                                              torch.nn.Unflatten(1, (256, 1, 1))
+                                              )
+        self.decoder = torch.nn.Sequential(torch.nn.ConvTranspose2d(256, 96, 8, 1, 0),
+                                           torch.nn.BatchNorm2d(96),
+                                           torch.nn.GELU(),
+                                           torch.nn.ConvTranspose2d(96, 32, 8, 8, 0),
+                                           torch.nn.BatchNorm2d(32),
+                                           torch.nn.GELU(),
+                                           torch.nn.ConvTranspose2d(32, 8, 2, 2, 0),
+                                           torch.nn.BatchNorm2d(8),
+                                           torch.nn.GELU(),
+                                           torch.nn.ConvTranspose2d(8, 2, 3, 2, 0)
+                                           )
+
+
+class NoisySurrogateNet(SurrogateNet):
+    scale = .1
+
+    def __init__(self, *args, scale=.1, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.scale = scale
+
+    def forward(self,  v, H, A, v_a, v_o):
+        x = self.input_activation(self.input_layer_v(torch.cat((v, v_a, v_o), 1))
+                                  + self.input_layer_HA(torch.cat((H, A), 1)))
+        x1 = self.encoder(x)
+        if self.training:
+            x2 = self.bottleneck(x1) + torch.randn_like(x1) * self.scale**2
+        else:
+            x2 = self.bottleneck(x1)
+        x3 = self.decoder(x2)
+        return x3
+
+
 class UNet(torch.nn.Module):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)

@@ -8,7 +8,7 @@ from tqdm import trange
 
 from dataset import FourierData, SeaIceTransform
 from loss import Loss
-from surrogate_net import SurrogateNet, UNet
+from surrogate_net import SurrogateNet, UNet, NoisySurrogateNet, SmallSurrogateNet
 
 
 # from visualisation import plot_comparison, plot_losses
@@ -83,7 +83,14 @@ if __name__ == "__main__":
 
     dev = torch.device('cuda') if torch.cuda.is_available() else torch.device('cpu')
 
-    model = UNet().to(dev) if model_name == 'UNet' else SurrogateNet().to(dev)
+    if model_name == 'UNet':
+        model = UNet().to(dev)
+    elif model_name == 'Noisy':
+        model = NoisySurrogateNet().to(dev)
+    elif model_name == 'Small':
+        model = SmallSurrogateNet().to(dev)
+    else:
+        model = SurrogateNet().to(dev)
 
     dataset = FourierData(data_path, SeaIceTransform(), dev=dev)
 
