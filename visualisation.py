@@ -2,6 +2,7 @@ import glob
 import os
 import re
 from collections import defaultdict
+from math import erf
 from typing import List, Tuple, Union, Dict
 
 import matplotlib.pyplot as plt
@@ -67,7 +68,7 @@ def plot_results(experiment: str, p: Union[Tuple, List] = (3, 5, 15), o: Union[T
     return res
 
 
-def plot_experiments_loss(experiments: List[str], loss_type: str = 'classic', last: bool = False):
+def plot_experiments_loss(experiments: List[str], loss_type: str = 'classic', last: bool = False, names = None):
     res = defaultdict(lambda: [])
     for exp in experiments:
         for fn in glob.glob(f'experiments/{exp}/' + r'*.li'):
@@ -77,7 +78,7 @@ def plot_experiments_loss(experiments: List[str], loss_type: str = 'classic', la
     mean = [np.mean(li) for li in res.values()]
     # TODO: compute errorbar
 
-    plt.bar(experiments, mean)
+    plt.bar(experiments if names is None else names, mean)
     for i, exp in enumerate(experiments):
         plt.scatter([i] * len(res[exp]), res[exp], c='k')
 
@@ -105,6 +106,17 @@ def plot_model_output(model: torch.nn.Module, dataset: SeaIceDataset, i: int = 0
     output = model(*dataset[i:(i+1)][:-1]).detach().cpu()[0, dim]
     plt.imshow(output)#, norm=SymLogNorm(linthresh=1e-2, linscale=1, base=10))
     plt.show()
+
+
+def p_value(exp1: str, exp2: str, loss_type: str = 'MCE'):
+    fn = ['experiments/' + exp1 + '/' + f for f in os.listdir('experiments/' + exp1) if f[-3:] == '.li']
+    l1 = [np.mean(torch.load(file)[loss_type][-1]) for file in fn]
+    fn = ['experiments/' + exp2 + '/' + f for f in os.listdir('experiments/' + exp2) if f[-3:] == '.li']
+    l2 = [np.mean(torch.load(file)[loss_type][-1]) for file in fn]
+    l0 = l1 + l2
+    z = (np.abs(np.mean(l1) - np.mean(l2))) / np.sqrt(1/len(l1) + 1/len(l2)) / np.std(l0)
+    p = (1 - erf(z)) / 2
+    return p
 
 
 if __name__ == "__main__":
