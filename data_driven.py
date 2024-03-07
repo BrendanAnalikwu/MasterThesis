@@ -99,7 +99,7 @@ if __name__ == "__main__":
     else:
         model = SurrogateNet().to(dev)
 
-    dataset = FourierData(data_path, SeaIceTransform(), dev=dev)
+    dataset = FourierData(data_path, SeaIceTransform(), dev=dev, phys_i=10)
 
     model, results = train(model, dataset, dev, n_steps, main_loss, job_id)
 

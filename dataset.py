@@ -79,20 +79,23 @@ class SeaIceTransform(object):
 class FourierData(SeaIceDataset):
     dt = 2.
 
-    def __init__(self, basedir: str, transform: Optional[SeaIceTransform] = None, dev: torch.device = 'cpu'):
+    def __init__(self, basedir: str, transform: Optional[SeaIceTransform] = None, dev: torch.device = 'cpu',
+                 phys_i: int = 0):
         self.transform = transform
-        dirs, fn_c, t = zip(*[(dn, os.path.join(dn, "coef.param"),
-                               list(range(1, 1 + len(list(filter(lambda n: n[:3] == 'dgh', os.listdir(dn))))))) for s in
-                              os.listdir(basedir) if os.path.isdir(subdir := os.path.join(basedir, s)) for d in
-                              os.listdir(subdir) if os.path.isdir(dn := os.path.join(subdir, d))])
-        fn_v, is_label, is_data = zip(*[(os.path.join(d, fn), i != 0, i != (len(fl) - 1)) for d in dirs if
+        dirs, fn_c = zip(*[(dn, os.path.join(dn, "coef.param")) for s in os.listdir(basedir) if
+                           os.path.isdir(subdir := os.path.join(basedir, s)) for d in
+                           os.listdir(subdir) if os.path.isdir(dn := os.path.join(subdir, d))])
+        fn_v, is_label, is_data = zip(*[(os.path.join(d, fn), i != phys_i, i != (len(fl) - 1)) for d in dirs if
                                         (fl := list(filter(lambda n: n[0] == 'v', sorted(os.listdir(d))))) for i, fn
-                                        in enumerate(fl)])
+                                        in enumerate(fl) if i >= phys_i])
+        t = [list(filter(lambda k: k > phys_i, [int(fn.replace('v.', '').replace('.vtk', '')) for fn in os.listdir(d) if fn[:2] == 'v.'])) for d in dirs]
 
         self.velocities = SeaIceDataset.scale_velocity(read_velocities(fn_v)).to(dev)
         self.data = self.velocities[list(is_data)]
         self.label = self.velocities[list(is_label)] - self.data
-        self.H, self.A = read_HA([os.path.join(d, fn) for d in dirs for fn in sorted(os.listdir(d)) if fn[:3] == 'dgh'])
+        fn_dgh = [os.path.join(d, fn) for d in dirs for i, fn in
+                  enumerate(sorted(filter(lambda fn: fn[:3] == 'dgh', os.listdir(d)))) if i >= phys_i]
+        self.H, self.A = read_HA(fn_dgh)
         self.H = self.H.to(dev)
         self.A = self.A.to(dev)
 
@@ -170,10 +173,14 @@ class FourierData(SeaIceDataset):
         scaling = (ub - lb) / (2 * sigma)
         intercept = (ub - lb) / 2 + lb
 
-        res_x = torch.stack([c_x_c[i] * torch.cos(i_x_c[i] * x) for i in range(len(i_x_c))]).sum(dim=0)
-        res_x += torch.stack([c_x_s[i] * torch.sin(i_x_s[i] * x) for i in range(len(i_x_s))]).sum(dim=0)
-        res_y = torch.stack([c_y_c[i] * torch.cos(i_y_c[i] * y) for i in range(len(i_y_c))]).sum(dim=0)
-        res_y += torch.stack([c_y_s[i] * torch.sin(i_y_s[i] * y) for i in range(len(i_y_s))]).sum(dim=0)
+        res_x = torch.stack([c_x_c[i] * torch.cos(i_x_c[i] * x) for i in range(len(i_x_c))]).sum(dim=0) if len(
+            i_x_c) > 0 else torch.zeros_like(x)
+        res_x += torch.stack([c_x_s[i] * torch.sin(i_x_s[i] * x) for i in range(len(i_x_s))]).sum(dim=0) if len(
+            i_x_s) > 0 else torch.zeros_like(x)
+        res_y = torch.stack([c_y_c[i] * torch.cos(i_y_c[i] * y) for i in range(len(i_y_c))]).sum(dim=0) if len(
+            i_y_c) > 0 else torch.zeros_like(y)
+        res_y += torch.stack([c_y_s[i] * torch.sin(i_y_s[i] * y) for i in range(len(i_y_s))]).sum(dim=0) if len(
+            i_y_s) > 0 else torch.zeros_like(y)
         res = res_x * res_y
         res *= scaling
         res += intercept

@@ -121,7 +121,7 @@ def p_value(exp1: str, exp2: str, loss_type: str = 'MCE'):
 
 if __name__ == "__main__":
     dev = torch.device('cpu')
-    dataset = FourierData("C:/Users/Brend/PycharmProjects/MasterThesis/data/data/", dev=dev)
+    dataset = FourierData("C:/Users/Brend/PycharmProjects/MasterThesis/data/data/", dev=dev, phys_i=10)
     benchmark = BenchData("C:/Users/Brend/Thesis/GAS/seaice/benchmark/Results8/", list(range(1, 97)), dev)
 
     print('done')
