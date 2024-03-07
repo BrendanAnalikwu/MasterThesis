@@ -76,6 +76,18 @@ class SeaIceTransform(object):
             return tuple(x.rot90(rotations, [-2, -1]) for x in sample)
 
 
+class PixelNorm(object):
+    def __init__(self, x: torch.Tensor, eps=1e-6):
+        self.mean = x.mean(dim=0, keepdim=True)
+        self.std = x.std(dim=0, keepdim=True) + eps
+
+    def __call__(self, x: torch.Tensor):
+        return (x - self.mean) / self.std
+
+    def inverse(self, x: torch.Tensor):
+        return x * self.std + self.mean
+
+
 class FourierData(SeaIceDataset):
     dt = 2.
 
@@ -132,9 +144,21 @@ class FourierData(SeaIceDataset):
             self.v_o[ind, 1] = self.fourier_sum_xy(coef, 'Oy', x, y)
             j += len(t[i])
 
-        # Scale
-        self.v_a = self.scale_velocity(self.v_a) * 1e-2
-        self.v_o = self.scale_velocity(self.v_o) * 1e1
+        # Get transforms
+        self.data_scaling = PixelNorm(self.data)
+        self.label_scaling = PixelNorm(self.label)
+        self.v_a_scaling = PixelNorm(self.v_a)
+        self.v_o_scaling = PixelNorm(self.v_o)
+        self.H_scaling = PixelNorm(self.H)
+        self.A_scaling = PixelNorm(self.A)
+
+        # Perform scaling
+        self.data = self.data_scaling(self.data)
+        self.label = self.label_scaling(self.label)
+        self.v_a = self.v_a_scaling(self.v_a)
+        self.v_o = self.v_o_scaling(self.v_o)
+        self.H = self.H_scaling(self.H)
+        self.A = self.A_scaling(self.A)
 
     @staticmethod
     def cyclone(coef: dict, x: torch.Tensor, y: torch.Tensor, t: list[float]):
