@@ -19,12 +19,12 @@ from surrogate_net import SurrogateNet, UNet, NoisySurrogateNet, SmallSurrogateN
 
 def train(model, dataset, dev, n_steps=128, main_loss='MSE', job_id=None):
     train_dataset, test_dataset = torch.utils.data.random_split(dataset, [.9, .1])
-    dataloader = DataLoader(train_dataset, batch_size=max(8, ceil(len(train_dataset) / 20)), shuffle=True)
+    dataloader = DataLoader(train_dataset, batch_size=max(8, ceil(len(train_dataset) / 20)), shuffle=True, drop_last=True)
 
     criterion = Loss(main_loss).to(dev)
     test_criterion = Loss(main_loss).to(dev)
     optim = torch.optim.Adam(model.parameters(), lr=1e-2)
-    scheduler = ReduceLROnPlateau(optim, patience=100, min_lr=1e-5)
+    scheduler = ReduceLROnPlateau(optim, patience=200, min_lr=1e-6)
     last_lr = optim.param_groups[0]['lr']
 
     model_id = f"{model.__class__.__name__}_{main_loss}"
@@ -54,6 +54,7 @@ def train(model, dataset, dev, n_steps=128, main_loss='MSE', job_id=None):
             if optim.param_groups[0]['lr'] != last_lr:
                 last_lr = optim.param_groups[0]['lr']
                 print(f"NEW LEARNING RATE: {last_lr}")
+                pbar.update()
 
         model.eval()
         with torch.no_grad():
