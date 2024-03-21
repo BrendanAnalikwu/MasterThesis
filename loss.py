@@ -407,7 +407,7 @@ def mean_relative_loss(dv: torch.Tensor, label: torch.Tensor, v: Optional[torch.
 
 
 class Loss(torch.nn.Module):
-    loss_names = ['MSE', 'SRE', 'MSE+SRE', 'MSE+MRE', 'MSE+MRDE', 'MSE+SRE+MRDE']
+    loss_names = ['MAE', 'MSE', 'SRE', 'MSE+SRE', 'MSE+MRE', 'MSE+MRDE', 'MSE+SRE+MRDE']
 
     def __init__(self, main_loss: str = 'MSE', mre_eps: float = 1e-2, mrde_eps: float = 1e-2, *args, **kwargs):
         super().__init__(*args, **kwargs)
@@ -419,6 +419,8 @@ class Loss(torch.nn.Module):
 
     def forward(self, dv: torch.Tensor, label: torch.Tensor, v_old: torch.Tensor, A: torch.tensor,
                 store: bool = True, grad: bool = True):
+        with torch.set_grad_enabled('MAE' in self.main and grad):
+            mae = torch.nn.functional.l1_loss(dv, label)
         with torch.set_grad_enabled('MSE' in self.main and grad):
             mse = torch.nn.functional.mse_loss(dv, label)
         with torch.set_grad_enabled('SRE' in self.main and grad):
@@ -429,13 +431,14 @@ class Loss(torch.nn.Module):
             msemre = mse + .1 * mre
         with torch.set_grad_enabled('MRDE' in self.main and grad):
             mrde = mean_relative_loss(dv, label, eps=self.mrde_eps)
-            msemrde = mse + .01 * mrde
-            msesremrde = mse + sre + .01 * mrde
+            msemrde = mse + mrde
+            msesremrde = mse + sre + mrde
 
         with torch.no_grad():
             mce = mean_concentration_loss(dv, label, v_old, A)
 
         if store:
+            self.results['MAE'].append(mae.item())
             self.results['MSE'].append(mse.item())
             self.results['SRE'].append(sre.item())
             self.results['MSE+SRE'].append(msesre.item())
@@ -448,7 +451,9 @@ class Loss(torch.nn.Module):
 
             self.results['MCE'].append(mce.item())
 
-        if self.main == 'MSE':
+        if self.main == 'MAE':
+            return mae
+        elif self.main == 'MSE':
             return mse
         elif self.main == 'SRE':
             return sre
@@ -465,6 +470,7 @@ class Loss(torch.nn.Module):
 
     def validate(self, dv: torch.Tensor, label: torch.Tensor, v_old: torch.Tensor, A: torch.tensor, store: bool = True):
         with torch.no_grad():
+            mae = torch.nn.functional.l1_loss(dv, label)
             mse = torch.nn.functional.mse_loss(dv, label)
             sre = strain_rate_loss(dv, label)
             mre = mean_relative_loss(dv, label, v_old, eps=self.mre_eps)
@@ -475,5 +481,5 @@ class Loss(torch.nn.Module):
             msemre = mse + mre
             msemrde = mse + .01 * mrde
             msesremrde = mse + sre + .01 * mrde
-        return {'MSE': mse, 'SRE': sre, 'MSE+SRE': msesre, 'MSE+MRE': msemre, 'MSE+MRDE': msemrde,
+        return {'MAE': mae, 'MSE': mse, 'SRE': sre, 'MSE+SRE': msesre, 'MSE+MRE': msemre, 'MSE+MRDE': msemrde,
                 'MSE+SRE+MRDE': msemrde, 'MRE': mre, 'MRDE': mrde, 'MCE': mce}

@@ -125,3 +125,13 @@ if __name__ == "__main__":
     benchmark = BenchData("C:/Users/Brend/Thesis/GAS/seaice/benchmark/Results8/", list(range(1, 97)), dev)
 
     print('done')
+
+# f, ax = plt.subplots(1,2)
+# ax[0].imshow(dataset.label_scaling.inverse(output).detach()[80,0] * 1e-4, norm=norm)
+# im = ax[1].imshow(dataset.label_scaling.inverse(dataset.label).detach()[80,0] * 1e-4, norm=norm)
+# plt.tight_layout()
+# f.subplots_adjust(right=.85)
+# cbar = f.add_axes([.9,.15,.03,.7])
+# cb = f.colorbar(im, cax=cbar, ticks = [-5e-6, -1e-6, -5e-7, 0, 5e-7, 1e-6, 5e-6], format=ticker.LogFormatterMathtext(labelOnlyBase=False))
+# cb.set_ticklabels([-5e-6, -1e-6, -5e-7, 0, 5e-7, 1e-6, 5e-6])
+# cb.ax.yaxis.set_major_formatter(ticker.ScalarFormatter(useMathText=True))

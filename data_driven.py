@@ -23,7 +23,7 @@ def train(model, dataset, dev, n_steps=128, main_loss='MSE', job_id=None):
 
     criterion = Loss(main_loss).to(dev)
     test_criterion = Loss(main_loss).to(dev)
-    optim = torch.optim.Adam(model.parameters(), lr=1e-2)
+    optim = torch.optim.Adam(model.parameters(), lr=1e-3)
     scheduler = ReduceLROnPlateau(optim, patience=200, min_lr=1e-6)
     last_lr = optim.param_groups[0]['lr']
 
@@ -75,7 +75,7 @@ def train(model, dataset, dev, n_steps=128, main_loss='MSE', job_id=None):
             torch.save(criterion.results, f'losses_{model_id}.li')
             torch.save(test_criterion.results, f'test_losses_{model_id}.li')
 
-        pbar.set_postfix(test_loss=test_loss.item(), lr=last_lr, refresh=False)
+        pbar.set_postfix(test_loss=test_criterion.results['MSE'][-1], lr=last_lr, refresh=False)
 
     torch.save(model, f'model_{model_id}.pt')
     torch.save(criterion.results, f'losses_{model_id}.li')
