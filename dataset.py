@@ -67,18 +67,60 @@ class SeaIceDataset(Dataset, ABC):
 
 class SeaIceTransform(object):
     def __call__(self, sample):
-        rotations = randint(0, 3)  # generate a random number of rotations
+        rot = randint(0, 3)  # generate a random number of rotations
         flip = bool(getrandbits(1))
+        data, H, A, v_a, label = sample
+        return (self.transform_velocity(data, rot, flip),
+                self.transform_quantity(H, rot, flip),
+                self.transform_quantity(A, rot, flip),
+                self.transform_velocity(v_a, rot, flip),
+                self.transform_velocity(label, rot, flip))
+
+    @staticmethod
+    def transform_velocity(x: torch.Tensor, rot: int, flip: bool):
+        x = x.clone()
+        if rot == 1:
+            x[..., 0, :, :] = x[..., 0, :, :].neg()
+            x = x[..., [1, 0], :, :]
+        elif rot == 2:
+            x = x.neg()
+        elif rot == 3:
+            x[..., 1, :, :] = -1*x[..., 1, :, :]
+            x = x[..., [1, 0], :, :]
+        x = x.rot90(rot, [-2, -1])
+
         if flip:
-            return tuple(x.flip(-1).rot90(rotations, [-2, -1]) for x in sample)
+            x[..., 1, :, :] = x[..., 1, :, :].neg()
+            return x.flip(-1)
         else:
-            return tuple(x.rot90(rotations, [-2, -1]) for x in sample)
+            return x
+
+    @staticmethod
+    def transform_quantity(x: torch.Tensor, rot: int, flip: bool):
+        if flip:
+            return x.flip(-1).rot90(rot, [-2, -1])
+        else:
+            return x.rot90(rot, [-2, -1])
 
 
 class PixelNorm(object):
-    def __init__(self, x: torch.Tensor, eps=1e-6):
-        self.mean = x.mean(dim=0, keepdim=True)
-        self.std = x.std(dim=0, keepdim=True) + eps
+    def __init__(self, x: torch.Tensor, eps=1e-6, transforms=True, velocity=True):
+        mean_ = x.mean(dim=0, keepdim=True)
+        if velocity:
+            self.mean = torch.mean(torch.cat([SeaIceTransform.transform_velocity(mean_, rot=r, flip=f) for f in (False, True) for r in range(4)]), dim=0, keepdim=True)
+        else:
+            self.mean = torch.mean(torch.cat([SeaIceTransform.transform_quantity(mean_, rot=r, flip=f) for f in (False, True) for r in range(4)]), dim=0, keepdim=True)
+
+        x_ = (x - self.mean).square().mean(dim=0, keepdim=True)
+        if velocity:
+            self.std = torch.mean(torch.cat(
+                [SeaIceTransform.transform_velocity(x_, rot=r, flip=f) for f in (False, True) for r in range(4)]).abs(),
+                                  dim=0, keepdim=True).sqrt()
+        else:
+            self.std = torch.mean(torch.cat(
+                [SeaIceTransform.transform_quantity(x_, rot=r, flip=f) for f in (False, True) for r in range(4)]).abs(),
+                                  dim=0, keepdim=True).sqrt()
+        self.std += eps
 
     def __call__(self, x: torch.Tensor):
         return (x - self.mean) / self.std
@@ -148,8 +190,8 @@ class FourierData(SeaIceDataset):
         self.label_scaling = PixelNorm(self.label)
         self.v_a_scaling = PixelNorm(self.v_a)
         # self.v_o_scaling = PixelNorm(self.v_o)
-        self.H_scaling = PixelNorm(self.H)
-        self.A_scaling = PixelNorm(self.A)
+        self.H_scaling = PixelNorm(self.H, velocity=False)
+        self.A_scaling = PixelNorm(self.A, velocity=False)
 
         # Perform scaling
         self.data = self.data_scaling(self.data)
