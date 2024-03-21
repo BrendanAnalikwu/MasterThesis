@@ -35,6 +35,9 @@ def train(model, dataset, dev, n_steps=128, main_loss='MSE', job_id=None):
         stamp = datetime.now().strftime('%m%d%H%M%S')
         model_id += f"_{stamp}".replace(' ', '')
 
+    reg_n = sum(p.numel() for p in model.parameters())
+    regs = []
+
     pbar = trange(n_steps, mininterval=60.)
     for i in pbar:
         for (data, H, A, v_a, v_o, label) in dataloader:
@@ -42,7 +45,11 @@ def train(model, dataset, dev, n_steps=128, main_loss='MSE', job_id=None):
             output = model(data, H, A, v_a, v_o)
 
             # Compute losses
-            loss = criterion(output, label, data, A, store=True)
+            reg = 0
+            for w in model.parameters():
+                reg += w.norm(1)
+            regs.append((reg / reg_n).item())
+            loss = criterion(output, label, data, A, store=True) + .1 * reg / reg_n
 
             # Gradient computation and optimiser step
             loss.backward()
