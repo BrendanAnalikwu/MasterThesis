@@ -188,7 +188,13 @@ class UNet(torch.nn.Module):
         self.layer5 = UNetLayerUp(512, 256, torch.nn.GELU, torch.nn.BatchNorm2d)  # 8 -> 16
         self.layer6 = UNetLayerUp(256, 128, torch.nn.GELU, torch.nn.BatchNorm2d)  # 16 -> 32
         self.layer7 = UNetLayerUp(128, 64, torch.nn.GELU, torch.nn.BatchNorm2d)  # 32 -> 64
-        self.output = torch.nn.ConvTranspose2d(64, 2, 7, 4, 1)  # 64 -> 257
+        self.output = torch.nn.Sequential(torch.nn.ConvTranspose2d(64, 32, 4, 4, 0),  # 64 -> 256
+                                          torch.nn.BatchNorm2d(32),
+                                          torch.nn.GELU(),
+                                          torch.nn.ConvTranspose2d(32, 32, 2, 1, 0),  # 256 -> 257
+                                          torch.nn.BatchNorm2d(32),
+                                          torch.nn.GELU(),
+                                          torch.nn.Conv2d(32, 2, 3, 1, 1, padding_mode='zeros'))  # 257 -> 257
 
     def forward(self,  v, H, A, v_a):
         x = self.input_activation(self.input_layer_v(torch.cat((v, v_a), 1))
