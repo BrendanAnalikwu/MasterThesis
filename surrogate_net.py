@@ -160,7 +160,7 @@ class UNet(torch.nn.Module):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
 
-        self.input_layer_v = torch.nn.Conv2d(6, 64, 7, 4, 1, bias=False)  # 257 -> 64
+        self.input_layer_v = torch.nn.Conv2d(4, 64, 7, 4, 1, bias=False)  # 257 -> 64
         self.input_layer_HA = torch.nn.Conv2d(2, 64, 6, 4, 1, bias=False)  # 256 -> 64
         self.input_activation = torch.nn.Sequential(torch.nn.BatchNorm2d(64), torch.nn.GELU())
         self.input_conv = torch.nn.Sequential(
@@ -190,8 +190,8 @@ class UNet(torch.nn.Module):
         self.layer7 = UNetLayerUp(128, 64, torch.nn.GELU, torch.nn.BatchNorm2d)  # 32 -> 64
         self.output = torch.nn.ConvTranspose2d(64, 2, 7, 4, 1)  # 64 -> 257
 
-    def forward(self,  v, H, A, v_a, v_o):
-        x = self.input_activation(self.input_layer_v(torch.cat((v, v_a, v_o), 1))
+    def forward(self,  v, H, A, v_a):
+        x = self.input_activation(self.input_layer_v(torch.cat((v, v_a), 1))
                                   + self.input_layer_HA(torch.cat((H, A), 1)))
         x1 = self.input_conv(x)
         x2 = self.layer1(x1)
@@ -229,7 +229,7 @@ class UNetLayerUp(torch.nn.Module):
     def __init__(self, size_in, size_out, activation, normalization, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self.layer1 = torch.nn.Sequential(
-            torch.nn.ConvTranspose2d(size_in, size_out, 4, 2, 1),
+            torch.nn.ConvTranspose2d(size_in, size_out, 2, 2, 0),
             normalization(size_out),
             activation())
         self.layer2 = torch.nn.Sequential(

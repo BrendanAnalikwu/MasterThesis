@@ -40,9 +40,9 @@ def train(model, dataset, dev, n_steps=128, main_loss='MSE', job_id=None):
 
     pbar = trange(n_steps, mininterval=60.)
     for i in pbar:
-        for (data, H, A, v_a, v_o, label) in dataloader:
+        for (data, H, A, v_a, label) in dataloader:
             # Forward pass and compute output
-            output = model(data, H, A, v_a, v_o)
+            output = model(data, H, A, v_a)
 
             # Compute losses
             reg = 0

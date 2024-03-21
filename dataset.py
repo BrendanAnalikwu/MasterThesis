@@ -44,13 +44,12 @@ class SeaIceDataset(Dataset, ABC):
     H: torch.Tensor
     A: torch.Tensor
     v_a: torch.Tensor
-    v_o: torch.Tensor
+    # v_o: torch.Tensor
     label: torch.Tensor
     transform = None
 
     def retrieve(self, index) -> T_co:
-        return (self.data[index], self.H[index], self.A[index], self.v_a[index],
-                self.v_o[index], self.label[index])
+        return self.data[index], self.H[index], self.A[index], self.v_a[index], self.label[index]
 
     def __getitem__(self, index) -> T_co:
         sample = self.retrieve(index)
@@ -112,7 +111,7 @@ class FourierData(SeaIceDataset):
         self.A = self.A.to(dev)
 
         self.v_a = torch.empty_like(self.data)
-        self.v_o = torch.empty_like(self.data)
+        # self.v_o = torch.empty_like(self.data)
 
         x, y = torch.meshgrid(torch.linspace(0, 512, 257), torch.linspace(0, 512, 257), indexing='ij')
         x = x.reshape(1, 257, 257) / 1e3
@@ -140,15 +139,15 @@ class FourierData(SeaIceDataset):
 
             ind = slice(j, j + len(t[i]))
             self.v_a[ind] = self.cyclone(coef, x, y, [self.dt * k for k in t[i]])
-            self.v_o[ind, 0] = self.fourier_sum_xy(coef, 'Ox', x, y)
-            self.v_o[ind, 1] = self.fourier_sum_xy(coef, 'Oy', x, y)
+            # self.v_o[ind, 0] = self.fourier_sum_xy(coef, 'Ox', x, y)
+            # self.v_o[ind, 1] = self.fourier_sum_xy(coef, 'Oy', x, y)
             j += len(t[i])
 
         # Get transforms
         self.data_scaling = PixelNorm(self.data)
         self.label_scaling = PixelNorm(self.label)
         self.v_a_scaling = PixelNorm(self.v_a)
-        self.v_o_scaling = PixelNorm(self.v_o)
+        # self.v_o_scaling = PixelNorm(self.v_o)
         self.H_scaling = PixelNorm(self.H)
         self.A_scaling = PixelNorm(self.A)
 
@@ -156,7 +155,7 @@ class FourierData(SeaIceDataset):
         self.data = self.data_scaling(self.data)
         self.label = self.label_scaling(self.label)
         self.v_a = self.v_a_scaling(self.v_a)
-        self.v_o = self.v_o_scaling(self.v_o)
+        # self.v_o = self.v_o_scaling(self.v_o)
         self.H = self.H_scaling(self.H)
         self.A = self.A_scaling(self.A)
 
