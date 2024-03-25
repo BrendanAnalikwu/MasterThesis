@@ -194,7 +194,8 @@ class UNet(torch.nn.Module):
                                           torch.nn.ConvTranspose2d(32, 32, 2, 1, 0),  # 256 -> 257
                                           torch.nn.BatchNorm2d(32),
                                           torch.nn.GELU(),
-                                          torch.nn.Conv2d(32, 2, 3, 1, 1, padding_mode='zeros'))  # 257 -> 257
+                                          torch.nn.Conv2d(32, 2, 3, 1, 1, padding_mode='zeros'),
+                                          SymmetricExponentialUnit())  # 257 -> 257
 
     def forward(self,  v, H, A, v_a):
         x = self.input_activation(self.input_layer_v(torch.cat((v, v_a), 1))
@@ -250,3 +251,11 @@ class UNetLayerUp(torch.nn.Module):
     def forward(self, x: torch.tensor, skip: torch.tensor):
         x1 = self.layer1(x)
         return self.layer2(torch.cat((x1, skip), dim=1))
+
+
+class SymmetricExponentialUnit(torch.nn.Module):
+    def __init__(self):
+        super(SymmetricExponentialUnit, self).__init__()
+
+    def forward(self, x):
+        return torch.nn.functional.relu(torch.exp(x) - 1) - torch.nn.functional.relu(torch.exp(-x) - 1) - x
