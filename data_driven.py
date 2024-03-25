@@ -1,6 +1,5 @@
 from math import ceil
-import torch
-from math import ceil
+from typing import Optional, Tuple
 
 import torch
 from torch.optim.lr_scheduler import ReduceLROnPlateau
@@ -15,16 +14,17 @@ from surrogate_net import SurrogateNet, UNet, NoisySurrogateNet, SmallSurrogateN
 # from visualisation import plot_comparison, plot_losses
 # from torchvision.utils import make_grid
 # from dataset import transform_data
+torch.manual_seed(0)
 
 
-def train(model, dataset, dev, n_steps=128, main_loss='MSE', job_id=None):
-    train_dataset, test_dataset = torch.utils.data.random_split(dataset, [.9, .1])
-    dataloader = DataLoader(train_dataset, batch_size=max(8, ceil(len(train_dataset) / 20)), shuffle=True, drop_last=True)
+def train(model, dataset, dev, n_steps=128, main_loss='MSE', job_id=None, betas=(.9, .999), batch_size=8):
+    train_dataset, test_dataset = torch.utils.data.random_split(dataset, [.8, .2])
+    dataloader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True, drop_last=True)
 
     criterion = Loss(main_loss).to(dev)
     test_criterion = Loss(main_loss).to(dev)
-    optim = torch.optim.Adam(model.parameters(), lr=1e-3)
-    scheduler = ReduceLROnPlateau(optim, patience=200, min_lr=1e-6)
+    optim = torch.optim.Adam(model.parameters(), lr=1e-2, betas=betas)
+    scheduler = ReduceLROnPlateau(optim, patience=200, min_lr=1e-9)
     last_lr = optim.param_groups[0]['lr']
 
     model_id = f"{model.__class__.__name__}_{main_loss}"
@@ -38,7 +38,7 @@ def train(model, dataset, dev, n_steps=128, main_loss='MSE', job_id=None):
     reg_n = sum(p.numel() for p in model.parameters())
     regs = []
 
-    pbar = trange(n_steps, mininterval=60.)
+    pbar = trange(n_steps, mininterval=1.)
     for i in pbar:
         for (data, H, A, v_a, label) in dataloader:
             # Forward pass and compute output
@@ -65,9 +65,9 @@ def train(model, dataset, dev, n_steps=128, main_loss='MSE', job_id=None):
 
         model.eval()
         with torch.no_grad():
-            test_output = model(*test_dataset[:][:-1])
-            test_loss = test_criterion(test_output, test_dataset[:][-1], test_dataset[:][0], test_dataset[:][2],
-                                       store=True, grad=False)
+            t_data, t_H, t_A, t_v_a, t_label = test_dataset[:]
+            test_output = model(t_data, t_H, t_A, t_v_a)
+            test_criterion(test_output, t_label, t_data, t_A, store=True, grad=False)
         model.train()
 
         if i % 5 == 0:
@@ -75,7 +75,7 @@ def train(model, dataset, dev, n_steps=128, main_loss='MSE', job_id=None):
             torch.save(criterion.results, f'losses_{model_id}.li')
             torch.save(test_criterion.results, f'test_losses_{model_id}.li')
 
-        pbar.set_postfix(test_loss=test_criterion.results['MSE'][-1], lr=last_lr, refresh=False)
+        pbar.set_postfix(loss=criterion.results[main_loss][-1], test_loss=test_criterion.results[main_loss][-1], lr=last_lr)
 
     torch.save(model, f'model_{model_id}.pt')
     torch.save(criterion.results, f'losses_{model_id}.li')
@@ -87,13 +87,15 @@ def train(model, dataset, dev, n_steps=128, main_loss='MSE', job_id=None):
 if __name__ == "__main__":
     import sys
 
-    job_id = None
     data_path = (sys.argv[1])
     n_steps = int(sys.argv[2])
     main_loss = str(sys.argv[3])
     model_name = str(sys.argv[4])  # 'UNet' or else SurrogateNet
-    if len(sys.argv) == 6:
-        job_id = sys.argv[5]
+    job_id = sys.argv[5]
+    betas = float(sys.argv[6]), float(sys.argv[7])
+    batch_size = 16
+    if len(sys.argv) == 9:
+        batch_size = int(sys.argv[8])
 
     dev = torch.device('cuda') if torch.cuda.is_available() else torch.device('cpu')
 
@@ -108,7 +110,7 @@ if __name__ == "__main__":
 
     dataset = FourierData(data_path, SeaIceTransform(), dev=dev, phys_i=10)
 
-    model, results = train(model, dataset, dev, n_steps, main_loss, job_id)
+    model, results = train(model, dataset, dev, n_steps, main_loss, job_id, betas, batch_size)
 
     # # Plot results
     # plot_comparison(model, dataset, 0, 0, patch_size, overlap)
