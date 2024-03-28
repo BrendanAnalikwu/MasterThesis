@@ -160,8 +160,8 @@ class UNet(torch.nn.Module):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
 
-        self.input_layer_v = torch.nn.Conv2d(4, 64, 7, 4, 1, bias=False)  # 257 -> 64
-        self.input_layer_HA = torch.nn.Conv2d(2, 64, 6, 4, 1, bias=False)  # 256 -> 64
+        self.input_layer_v = torch.nn.Conv2d(4, 64, 7, 4, 1)  # 257 -> 64
+        self.input_layer_HA = torch.nn.Conv2d(2, 64, 6, 4, 1)  # 256 -> 64
         self.input_activation = torch.nn.Sequential(torch.nn.BatchNorm2d(64), torch.nn.GELU())
         self.input_conv = torch.nn.Sequential(
             torch.nn.Conv2d(64, 64, 3, 1, 1, padding_mode='zeros'),
@@ -180,6 +180,8 @@ class UNet(torch.nn.Module):
             torch.nn.BatchNorm2d(1024),
             torch.nn.GELU(),
             torch.nn.Conv2d(1024, 1024, 4, 1, 0),
+            torch.nn.BatchNorm2d(1024),
+            torch.nn.GELU(),
             torch.nn.ConvTranspose2d(1024, 1024, 4, 1, 0),
             torch.nn.BatchNorm2d(1024),
             torch.nn.GELU()
@@ -191,11 +193,14 @@ class UNet(torch.nn.Module):
         self.output = torch.nn.Sequential(torch.nn.ConvTranspose2d(64, 32, 4, 4, 0),  # 64 -> 256
                                           torch.nn.BatchNorm2d(32),
                                           torch.nn.GELU(),
-                                          torch.nn.ConvTranspose2d(32, 32, 2, 1, 0),  # 256 -> 257
+                                          torch.nn.Conv2d(32, 32, 2, 1, 0),  # 256 -> 255
                                           torch.nn.BatchNorm2d(32),
-                                          torch.nn.GELU(),
+                                          # torch.nn.GELU(),
+                                          # torch.nn.Conv2d(32, 32, 3, 1, 1, padding_mode='zeros'),
+                                          torch.nn.Hardtanh(-4.25, 4.25),
                                           torch.nn.Conv2d(32, 2, 3, 1, 1, padding_mode='zeros'),
-                                          SymmetricExponentialUnit())  # 257 -> 257
+                                          SymmetricExponentialUnit())  # ,
+                                            # torch.nn.InstanceNorm2d(2, affine=False))  # 257 -> 257
 
     def forward(self,  v, H, A, v_a):
         x = self.input_activation(self.input_layer_v(torch.cat((v, v_a), 1))
@@ -209,8 +214,8 @@ class UNet(torch.nn.Module):
         x7 = self.layer5(x6, x3)
         x8 = self.layer6(x7, x2)
         x9 = self.layer7(x8, x1)
-        x = self.output(x9)
-        return x
+        out = self.output(x9)
+        return torch.nn.functional.pad(out, (1, 1, 1, 1))  # , torch.exp(-(code[:, :2]/10).square()) * 2, code[:, 2:4] / 10
 
 
 class UNetLayerDown(torch.nn.Module):
@@ -240,7 +245,7 @@ class UNetLayerUp(torch.nn.Module):
             normalization(size_out),
             activation())
         self.layer2 = torch.nn.Sequential(
-            torch.nn.Conv2d(2 * size_out, size_out, 3, 1, 1, padding_mode='zeros'),
+            torch.nn.Conv2d(size_in, size_out, 3, 1, 1, padding_mode='zeros'),
             normalization(size_out),
             activation(),
             torch.nn.Conv2d(size_out, size_out, 3, 1, 1, padding_mode='zeros'),
