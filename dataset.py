@@ -66,15 +66,19 @@ class SeaIceDataset(Dataset, ABC):
 
 
 class SeaIceTransform(object):
-    def __call__(self, sample):
-        rot = randint(0, 3)  # generate a random number of rotations
-        flip = bool(getrandbits(1))
+    def __call__(self, sample, rot: int = None, flip: bool = None):
+        if rot is None:
+            rot = randint(0, 3)  # generate a random number of rotations
+        if flip is None:
+            flip = bool(getrandbits(1))
+
         data, H, A, v_a, label = sample
-        return (self.transform_velocity(data, rot, flip),
-                self.transform_quantity(H, rot, flip),
-                self.transform_quantity(A, rot, flip),
-                self.transform_velocity(v_a, rot, flip),
-                self.transform_velocity(label, rot, flip))
+        with torch.no_grad():
+            return (self.transform_velocity(data, rot, flip),
+                    self.transform_quantity(H, rot, flip),
+                    self.transform_quantity(A, rot, flip),
+                    self.transform_velocity(v_a, rot, flip),
+                    self.transform_velocity(label, rot, flip))
 
     @staticmethod
     def transform_velocity(x: torch.Tensor, rot: int, flip: bool):
