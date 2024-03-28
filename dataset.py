@@ -134,26 +134,44 @@ class PixelNorm(object):
 
 
 class ChannelNorm(object):
+    dims = (0, 2, 3)
+
     def __init__(self, x: torch.Tensor, eps=1e-6, transforms=True, velocity=True):
-        mean_ = x.mean(dim=(0, 2, 3), keepdim=True)
+        mean_ = x.mean(dim=self.dims, keepdim=True)
         if velocity:
             self.mean = torch.mean(torch.cat(
                 [SeaIceTransform.transform_velocity(mean_, rot=r, flip=f) for f in (False, True) for r in
-                 range(4)]), dim=(0, 2, 3), keepdim=True)
+                 range(4)]), dim=self.dims, keepdim=True)
         else:
             self.mean = torch.mean(torch.cat(
                 [SeaIceTransform.transform_quantity(mean_, rot=r, flip=f) for f in (False, True) for r in
-                 range(4)]), dim=(0, 2, 3), keepdim=True)
+                 range(4)]), dim=self.dims, keepdim=True)
 
-        x_ = (x - self.mean).square().mean(dim=(0, 2, 3), keepdim=True)
+        x_ = (x - self.mean).square().mean(dim=self.dims, keepdim=True)
         if velocity:
             self.std = torch.mean(torch.cat(
                 [SeaIceTransform.transform_velocity(x_, rot=r, flip=f) for f in (False, True) for r in
-                 range(4)]).abs(), dim=(0, 2, 3), keepdim=True).sqrt()
+                 range(4)]).abs(), dim=self.dims, keepdim=True).sqrt()
         else:
             self.std = torch.mean(torch.cat(
                 [SeaIceTransform.transform_quantity(x_, rot=r, flip=f) for f in (False, True) for r in
-                 range(4)]).abs(), dim=(0, 2, 3), keepdim=True).sqrt()
+                 range(4)]).abs(), dim=self.dims, keepdim=True).sqrt()
+        self.std += eps
+
+    def __call__(self, x: torch.Tensor):
+        return (x - self.mean) / self.std
+
+    def inverse(self, x: torch.Tensor):
+        return x * self.std + self.mean
+
+
+class InstanceNorm(object):
+    dims = (2, 3)
+
+    def __init__(self, x: torch.Tensor, eps=1e-6, transforms=True, velocity=True):
+        self.dims = (2, 3)
+        self.mean = x.mean(dim=self.dims, keepdim=True)
+        self.std = torch.std(x, dim=self.dims, keepdim=True)
         self.std += eps
 
     def __call__(self, x: torch.Tensor):
