@@ -1,5 +1,7 @@
 from math import ceil
 from typing import Optional, Tuple
+import matplotlib.pyplot as plt
+import numpy as np
 
 import torch
 from torch.optim.lr_scheduler import ReduceLROnPlateau
@@ -15,16 +17,30 @@ from surrogate_net import SurrogateNet, UNet, NoisySurrogateNet, SmallSurrogateN
 # from torchvision.utils import make_grid
 # from dataset import transform_data
 torch.manual_seed(0)
+getCoefficientNorm = lambda layer: np.sqrt(1 / (layer.weight.shape[1] * layer.weight.shape[2] * layer.weight.shape[3]))
+
+
+def getParameters(model: torch.nn.Module, lr: float = .1):
+    params = []
+    if len(list(model.children())) > 0:
+        for layer in model.children():
+            params.extend(getParameters(layer, lr))
+    else:
+        paramdict = {'params': model.parameters()}
+        if isinstance(model, (torch.nn.Conv2d, torch.nn.ConvTranspose2d)):
+            paramdict['lr'] = getCoefficientNorm(model) * lr
+        params.append(paramdict)
+    return params
 
 
 def train(model, dataset, dev, n_steps=128, main_loss='MSE', job_id=None, betas=(.9, .999), batch_size=8):
     train_dataset, test_dataset = torch.utils.data.random_split(dataset, [.8, .2])
-    dataloader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True, drop_last=True)
+    dataloader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True, drop_last=False)
 
     criterion = Loss(main_loss).to(dev)
     test_criterion = Loss(main_loss).to(dev)
-    optim = torch.optim.Adam(model.parameters(), lr=1e-2, betas=betas)
-    scheduler = ReduceLROnPlateau(optim, patience=200, min_lr=1e-9)
+    optim = torch.optim.Adam(getParameters(model, 1e-2), lr=1e-2, betas=betas)
+    scheduler = ReduceLROnPlateau(optim, patience=100, min_lr=1e-9)
     last_lr = optim.param_groups[0]['lr']
 
     model_id = f"{model.__class__.__name__}_{main_loss}"
@@ -37,6 +53,7 @@ def train(model, dataset, dev, n_steps=128, main_loss='MSE', job_id=None, betas=
 
     reg_n = sum(p.numel() for p in model.parameters())
     regs = []
+    stds = []
 
     pbar = trange(n_steps, mininterval=1.)
     for i in pbar:
@@ -45,11 +62,14 @@ def train(model, dataset, dev, n_steps=128, main_loss='MSE', job_id=None, betas=
             output = model(data, H, A, v_a)
 
             # Compute losses
-            reg = 0
-            for w in model.parameters():
-                reg += w.norm(1)
-            regs.append((reg / reg_n).item())
-            loss = criterion(output, label, data, A, store=True) + .1 * reg / reg_n
+            with torch.no_grad():
+                reg = 0
+                std = model.output[0].weight.std(dim=(2, 3)).mean()
+                for w in model.parameters():
+                    reg += w.norm(1)
+                regs.append((reg / reg_n).item())
+                stds.append(std.item())
+            loss = criterion(output, label, data, A, store=True)  # + .1 * reg / reg_n
 
             # Gradient computation and optimiser step
             loss.backward()
@@ -75,7 +95,7 @@ def train(model, dataset, dev, n_steps=128, main_loss='MSE', job_id=None, betas=
             torch.save(criterion.results, f'losses_{model_id}.li')
             torch.save(test_criterion.results, f'test_losses_{model_id}.li')
 
-        pbar.set_postfix(loss=criterion.results[main_loss][-1], test_loss=test_criterion.results[main_loss][-1], lr=last_lr)
+        pbar.set_postfix(loss=criterion.results[main_loss][-1], test_loss=test_criterion.results[main_loss][-1], lr=last_lr, nbe=scheduler.num_bad_epochs)
 
     torch.save(model, f'model_{model_id}.pt')
     torch.save(criterion.results, f'losses_{model_id}.li')
