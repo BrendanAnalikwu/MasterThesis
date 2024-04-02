@@ -193,12 +193,12 @@ class UNet(torch.nn.Module):
         self.output = torch.nn.Sequential(torch.nn.ConvTranspose2d(64, 32, 4, 4, 0),  # 64 -> 256
                                           torch.nn.BatchNorm2d(32),
                                           torch.nn.GELU(),
-                                          torch.nn.Conv2d(32, 32, 2, 1, 0),  # 256 -> 255
-                                          torch.nn.BatchNorm2d(32),
+                                          torch.nn.Conv2d(32, 2, 2, 1, 0),  # 256 -> 255
+                                          # torch.nn.BatchNorm2d(32),
                                           # torch.nn.GELU(),
                                           # torch.nn.Conv2d(32, 32, 3, 1, 1, padding_mode='zeros'),
-                                          torch.nn.Hardtanh(-4.25, 4.25),
-                                          torch.nn.Conv2d(32, 2, 3, 1, 1, padding_mode='zeros'),
+                                          # torch.nn.GELU(),
+                                          # torch.nn.Conv2d(32, 2, 3, 1, 1, padding_mode='zeros'),
                                           SymmetricExponentialUnit())  # ,
                                             # torch.nn.InstanceNorm2d(2, affine=False))  # 257 -> 257
 
@@ -216,6 +216,24 @@ class UNet(torch.nn.Module):
         x9 = self.layer7(x8, x1)
         out = self.output(x9)
         return torch.nn.functional.pad(out, (1, 1, 1, 1))  # , torch.exp(-(code[:, :2]/10).square()) * 2, code[:, 2:4] / 10
+
+    def encoder(self, v, H, A, v_a):
+        x = self.input_activation(self.input_layer_v(torch.cat((v, v_a), 1))
+                                  + self.input_layer_HA(torch.cat((H, A), 1)))
+        x1 = self.input_conv(x)
+        x2 = self.layer1(x1)
+        x3 = self.layer2(x2)
+        x4 = self.layer3(x3)
+        x5 = self.bottleneck(x4)
+        return x1, x2, x3, x4, x5
+
+    def decoder(self, x1, x2, x3, x4, x5):
+        x6 = self.layer4(x5, x4)
+        x7 = self.layer5(x6, x3)
+        x8 = self.layer6(x7, x2)
+        x9 = self.layer7(x8, x1)
+        out = self.output(x9)
+        return torch.nn.functional.pad(out, (1, 1, 1, 1)), x9
 
 
 class UNetLayerDown(torch.nn.Module):

@@ -399,6 +399,10 @@ def mean_concentration_loss(dv: torch.Tensor, label: torch.Tensor, v_old: torch.
             - advect((label + v_old) * 1e-4, A, 2., .5 / 256)).square().mean()
 
 
+def weighted_mse_loss(input, target):
+    return ((input - target).square() / target.square().mean(dim=(1, 2, 3), keepdim=True).sqrt()).mean()
+
+
 def mean_relative_loss(dv: torch.Tensor, label: torch.Tensor, v: Optional[torch.Tensor] = None, eps: float = 1e-4):
     if v is not None:
         return ((dv - label).norm(2, -3) / ((label + v).norm(2, -3) + eps)).mean()

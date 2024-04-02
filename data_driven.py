@@ -59,7 +59,9 @@ def train(model, dataset, dev, n_steps=128, main_loss='MSE', job_id=None, betas=
     for i in pbar:
         for (data, H, A, v_a, label) in dataloader:
             # Forward pass and compute output
-            output = model(data, H, A, v_a)
+            autoencoder_output = model.encoder(label, H, A, v_a)
+            # encoding_output = model.encoder(data, H, A, v_a)
+            output, coarse = model.decoder(*autoencoder_output)
 
             # Compute losses
             with torch.no_grad():
@@ -69,7 +71,7 @@ def train(model, dataset, dev, n_steps=128, main_loss='MSE', job_id=None, betas=
                     reg += w.norm(1)
                 regs.append((reg / reg_n).item())
                 stds.append(std.item())
-            loss = criterion(output, label, data, A, store=True)  # + .1 * reg / reg_n
+            loss = criterion(output, label, data, A, store=True) + torch.nn.functional.mse_loss(torch.nn.functional.avg_pool2d(label, 5, 4), coarse[:,:2])  # + .1 * reg / reg_n
 
             # Gradient computation and optimiser step
             loss.backward()
@@ -77,7 +79,7 @@ def train(model, dataset, dev, n_steps=128, main_loss='MSE', job_id=None, betas=
             optim.step()
             torch.cuda.empty_cache()
 
-            scheduler.step(loss.item())
+            scheduler.step(np.mean(criterion.results[main_loss][-len(dataloader):]))
             if optim.param_groups[0]['lr'] != last_lr:
                 last_lr = optim.param_groups[0]['lr']
                 print(f"NEW LEARNING RATE: {last_lr}")
@@ -128,7 +130,7 @@ if __name__ == "__main__":
     else:
         model = SurrogateNet().to(dev)
 
-    dataset = FourierData(data_path, SeaIceTransform(), dev=dev, phys_i=10)
+    dataset = FourierData(data_path, SeaIceTransform(), dev=dev, phys_i=25)
 
     model, results = train(model, dataset, dev, n_steps, main_loss, job_id, betas, batch_size)
 
