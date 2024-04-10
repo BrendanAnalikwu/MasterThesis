@@ -34,7 +34,7 @@ def getParameters(model: torch.nn.Module, lr: float = .1):
 
 
 def train(model, dataset, dev, n_steps=128, main_loss='MSE', job_id=None, betas=(.9, .999), batch_size=8):
-    train_dataset, test_dataset = torch.utils.data.random_split(dataset, [.8, .2])
+    test_dataset, train_dataset = dataset.get_test_train_split(.2)
     dataloader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True, drop_last=False)
 
     criterion = Loss(main_loss).to(dev)

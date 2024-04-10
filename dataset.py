@@ -207,7 +207,10 @@ class FourierData(SeaIceDataset):
         fn_v, is_label, is_data = zip(*[(os.path.join(d, fn), i != phys_i, i != (len(fl) - 1)) for d in dirs if
                                         (fl := list(filter(lambda n: n[0] == 'v', sorted(os.listdir(d))))) for i, fn
                                         in enumerate(fl) if i >= phys_i])
-        t = [list(filter(lambda k: k > phys_i, [int(fn.replace('v.', '').replace('.vtk', '')) for fn in os.listdir(d) if fn[:2] == 'v.'])) for d in dirs]
+        self.t = [list(filter(lambda k: k > phys_i,
+                              [int(fn.replace('v.', '').replace('.vtk', '')) for fn in os.listdir(d) if
+                               fn[:2] == 'v.'])) for
+                  d in self.dirs]
 
         self.velocities = SeaIceDataset.scale_velocity(read_velocities(fn_v)).to(dev)
         self.data = self.velocities[list(is_data)]
@@ -219,7 +222,6 @@ class FourierData(SeaIceDataset):
         self.A = self.A.to(dev)
 
         self.v_a = torch.empty_like(self.data)
-        # self.v_o = torch.empty_like(self.data)
 
         x, y = torch.meshgrid(torch.linspace(0, 512, 257), torch.linspace(0, 512, 257), indexing='ij')
         x = x.reshape(1, 257, 257) / 1e3
@@ -246,10 +248,8 @@ class FourierData(SeaIceDataset):
             f.close()
 
             ind = slice(j, j + len(t[i]))
-            self.v_a[ind] = self.cyclone(coef, x, y, [self.dt * k for k in t[i]])
-            # self.v_o[ind, 0] = self.fourier_sum_xy(coef, 'Ox', x, y)
-            # self.v_o[ind, 1] = self.fourier_sum_xy(coef, 'Oy', x, y)
-            j += len(t[i])
+            self.v_a[ind] = self.cyclone(coef, x, y, [self.dt * k for k in self.t[i]])
+            j += len(self.t[i])
 
         # Get transforms
         self.data_scaling = MinMaxNorm(self.data)
@@ -262,9 +262,19 @@ class FourierData(SeaIceDataset):
         self.data = self.data_scaling(self.data)
         self.label = self.label_scaling(self.label)
         self.v_a = self.v_a_scaling(self.v_a)
-        # self.v_o = self.v_o_scaling(self.v_o)
         self.H = self.H_scaling(self.H)
         self.A = self.A_scaling(self.A)
+
+    def get_test_train_split(self, frac: float = .2):
+        split_idx = int(len(self.t) * frac)
+        idx = torch.randperm(len(self.t))
+        test_idx = idx[:split_idx]
+        train_idx = idx[split_idx:]
+        m = 0
+        indices: list[list[int]] = [list(range(m, m := (m+len(tx)))) for tx in self.t]
+        test_indices = [i for idx in test_idx for i in indices[idx]]
+        train_indices = [i for idx in train_idx for i in indices[idx]]
+        return torch.utils.data.Subset(self, test_indices), torch.utils.data.Subset(self, train_indices)
 
     @staticmethod
     def cyclone(coef: dict, x: torch.Tensor, y: torch.Tensor, t: list[float]):
