@@ -181,6 +181,20 @@ class InstanceNorm(object):
         return x * self.std + self.mean
 
 
+class MinMaxNorm(object):
+    dims = (0, 2, 3)
+
+    def __init__(self, x: torch.Tensor, eps=1e-6, transforms=True, velocity=True):
+        self.mean = 0.
+        self.std = x.abs().amax(dim=self.dims, keepdim=True) - self.mean
+
+    def __call__(self, x: torch.Tensor):
+        return (x - self.mean) / self.std
+
+    def inverse(self, x: torch.Tensor):
+        return x * self.std + self.mean
+
+
 class FourierData(SeaIceDataset):
     dt = 2.
 
@@ -238,12 +252,11 @@ class FourierData(SeaIceDataset):
             j += len(t[i])
 
         # Get transforms
-        self.data_scaling = ChannelNorm(self.data)
-        self.label_scaling = ChannelNorm(self.label)
-        self.v_a_scaling = ChannelNorm(self.v_a)
-        # self.v_o_scaling = ChannelNorm(self.v_o)
-        self.H_scaling = ChannelNorm(self.H, velocity=False)
-        self.A_scaling = ChannelNorm(self.A, velocity=False)
+        self.data_scaling = MinMaxNorm(self.data)
+        self.label_scaling = MinMaxNorm(self.label)
+        self.v_a_scaling = MinMaxNorm(self.v_a)
+        self.H_scaling = MinMaxNorm(self.H, velocity=False)
+        self.A_scaling = MinMaxNorm(self.A, velocity=False)
 
         # Perform scaling
         self.data = self.data_scaling(self.data)

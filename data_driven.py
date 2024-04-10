@@ -39,8 +39,8 @@ def train(model, dataset, dev, n_steps=128, main_loss='MSE', job_id=None, betas=
 
     criterion = Loss(main_loss).to(dev)
     test_criterion = Loss(main_loss).to(dev)
-    optim = torch.optim.Adam(getParameters(model, 1e-2), lr=1e-2, betas=betas)
-    scheduler = ReduceLROnPlateau(optim, patience=100, min_lr=1e-9)
+    optim = torch.optim.Adam(getParameters(model, 1e-2), lr=1e-3, betas=betas)
+    # scheduler = ReduceLROnPlateau(optim, patience=100, min_lr=1e-9)
     last_lr = optim.param_groups[0]['lr']
 
     model_id = f"{model.__class__.__name__}_{main_loss}"
@@ -53,7 +53,6 @@ def train(model, dataset, dev, n_steps=128, main_loss='MSE', job_id=None, betas=
 
     reg_n = sum(p.numel() for p in model.parameters())
     regs = []
-    stds = []
 
     pbar = trange(n_steps, mininterval=1.)
     for i in pbar:
@@ -61,17 +60,15 @@ def train(model, dataset, dev, n_steps=128, main_loss='MSE', job_id=None, betas=
             # Forward pass and compute output
             autoencoder_output = model.encoder(label, H, A, v_a)
             # encoding_output = model.encoder(data, H, A, v_a)
-            output, coarse = model.decoder(*autoencoder_output)
+            output = model.decoder(*autoencoder_output)
 
             # Compute losses
             with torch.no_grad():
                 reg = 0
-                std = model.output[0].weight.std(dim=(2, 3)).mean()
                 for w in model.parameters():
                     reg += w.norm(1)
                 regs.append((reg / reg_n).item())
-                stds.append(std.item())
-            loss = criterion(output, label, data, A, store=True) + torch.nn.functional.mse_loss(torch.nn.functional.avg_pool2d(label, 5, 4), coarse[:,:2])  # + .1 * reg / reg_n
+            loss = criterion(output, label, data, A, store=True)  # + .1 * reg / reg_n
 
             # Gradient computation and optimiser step
             loss.backward()
@@ -79,7 +76,7 @@ def train(model, dataset, dev, n_steps=128, main_loss='MSE', job_id=None, betas=
             optim.step()
             torch.cuda.empty_cache()
 
-            scheduler.step(np.mean(criterion.results[main_loss][-len(dataloader):]))
+            # scheduler.step(np.mean(criterion.results[main_loss][-len(dataloader):]))
             if optim.param_groups[0]['lr'] != last_lr:
                 last_lr = optim.param_groups[0]['lr']
                 print(f"NEW LEARNING RATE: {last_lr}")
@@ -97,7 +94,8 @@ def train(model, dataset, dev, n_steps=128, main_loss='MSE', job_id=None, betas=
             torch.save(criterion.results, f'losses_{model_id}.li')
             torch.save(test_criterion.results, f'test_losses_{model_id}.li')
 
-        pbar.set_postfix(loss=criterion.results[main_loss][-1], test_loss=test_criterion.results[main_loss][-1], lr=last_lr, nbe=scheduler.num_bad_epochs)
+        pbar.set_postfix(loss=np.mean(criterion.results[main_loss][-len(dataloader):]),
+                         test_loss=np.mean(test_criterion.results[main_loss][-len(dataloader):]))
 
     torch.save(model, f'model_{model_id}.pt')
     torch.save(criterion.results, f'losses_{model_id}.li')
