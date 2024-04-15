@@ -2,6 +2,7 @@ from collections import defaultdict
 from math import sqrt
 from typing import Tuple, Optional
 
+import numpy as np
 import torch
 import torch.utils.data
 
@@ -420,6 +421,7 @@ class Loss(torch.nn.Module):
         self.results = defaultdict(list)
         self.mre_eps = mre_eps
         self.mrde_eps = mrde_eps
+        self.stack = []
 
     def forward(self, dv: torch.Tensor, label: torch.Tensor, v_old: torch.Tensor, A: torch.tensor,
                 store: bool = True, grad: bool = True):
@@ -441,19 +443,14 @@ class Loss(torch.nn.Module):
         with torch.no_grad():
             mce = mean_concentration_loss(dv, label, v_old, A)
 
+        self.stack.append({'MAE': mae.item(), 'MSE': mse.item(), 'SRE': sre.item(),
+                           'MSE+SRE': msesre.item(), 'MSE+MRE': msemre.item(), 'MSE+MRDE': msemrde.item(),
+                           'MSE+SRE+MRDE': msesremrde.item(),
+                           'MRE': mre.item(), 'MRDE': mrde.item(),
+                           'MCE': mce.item()})
+
         if store:
-            self.results['MAE'].append(mae.item())
-            self.results['MSE'].append(mse.item())
-            self.results['SRE'].append(sre.item())
-            self.results['MSE+SRE'].append(msesre.item())
-            self.results['MSE+MRE'].append(msemre.item())
-            self.results['MSE+MRDE'].append(msemrde.item())
-            self.results['MSE+SRE+MRDE'].append(msesremrde.item())
-
-            self.results['MRE'].append(mre.item())
-            self.results['MRDE'].append(mrde.item())
-
-            self.results['MCE'].append(mce.item())
+            self.flush_stack_to_results()
 
         if self.main == 'MAE':
             return mae
@@ -471,6 +468,11 @@ class Loss(torch.nn.Module):
             return msesremrde
         elif self.main == 'MCE':
             return mce
+
+    def flush_stack_to_results(self):
+        for key in self.stack[0].keys():
+            self.results[key].append(np.mean([d[key] for d in self.stack]))
+        self.stack = []
 
     def validate(self, dv: torch.Tensor, label: torch.Tensor, v_old: torch.Tensor, A: torch.tensor, store: bool = True):
         with torch.no_grad():

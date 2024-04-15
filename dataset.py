@@ -3,7 +3,7 @@ from abc import ABC
 from collections import defaultdict
 from math import cos, sin, pi, sqrt, exp
 from random import randint, getrandbits
-from typing import List, Optional
+from typing import List, Optional, Union
 
 import numpy as np
 import torch
@@ -107,7 +107,21 @@ class SeaIceTransform(object):
             return x.rot90(rot, [-2, -1])
 
 
-class PixelNorm(object):
+class BaseNorm(object):
+    mean: Union[float, torch.Tensor]
+    std: Union[float, torch.Tensor]
+
+    def __call__(self, x: torch.Tensor):
+        return (x - self.mean) / self.std
+
+    def inverse(self, x: torch.Tensor):
+        return x * self.std + self.mean
+
+    def __repr__(self):
+        return f'{self.__class__.__name__} object with mean = {self.mean} and std = {self.std}'
+
+
+class PixelNorm(BaseNorm):
     def __init__(self, x: torch.Tensor, eps=1e-6, transforms=True, velocity=True):
         mean_ = x.mean(dim=0, keepdim=True)
         if velocity:
@@ -126,14 +140,8 @@ class PixelNorm(object):
                                   dim=0, keepdim=True).sqrt()
         self.std += eps
 
-    def __call__(self, x: torch.Tensor):
-        return (x - self.mean) / self.std
 
-    def inverse(self, x: torch.Tensor):
-        return x * self.std + self.mean
-
-
-class ChannelNorm(object):
+class ChannelNorm(BaseNorm):
     dims = (0, 2, 3)
 
     def __init__(self, x: torch.Tensor, eps=1e-6, transforms=True, velocity=True):
@@ -158,14 +166,8 @@ class ChannelNorm(object):
                  range(4)]).abs(), dim=self.dims, keepdim=True).sqrt()
         self.std += eps
 
-    def __call__(self, x: torch.Tensor):
-        return (x - self.mean) / self.std
 
-    def inverse(self, x: torch.Tensor):
-        return x * self.std + self.mean
-
-
-class InstanceNorm(object):
+class InstanceNorm(BaseNorm):
     dims = (2, 3)
 
     def __init__(self, x: torch.Tensor, eps=1e-6, transforms=True, velocity=True):
@@ -174,25 +176,13 @@ class InstanceNorm(object):
         self.std = torch.std(x, dim=self.dims, keepdim=True)
         self.std += eps
 
-    def __call__(self, x: torch.Tensor):
-        return (x - self.mean) / self.std
 
-    def inverse(self, x: torch.Tensor):
-        return x * self.std + self.mean
-
-
-class MinMaxNorm(object):
+class MinMaxNorm(BaseNorm):
     dims = (0, 2, 3)
 
     def __init__(self, x: torch.Tensor, eps=1e-6, transforms=True, velocity=True):
         self.mean = 0.
         self.std = x.abs().amax(dim=self.dims, keepdim=True) - self.mean
-
-    def __call__(self, x: torch.Tensor):
-        return (x - self.mean) / self.std
-
-    def inverse(self, x: torch.Tensor):
-        return x * self.std + self.mean
 
 
 class FourierData(SeaIceDataset):
@@ -201,16 +191,16 @@ class FourierData(SeaIceDataset):
     def __init__(self, basedir: str, transform: Optional[SeaIceTransform] = None, dev: torch.device = 'cpu',
                  phys_i: int = 0):
         self.transform = transform
-        dirs, fn_c = zip(*[(dn, os.path.join(dn, "coef.param")) for s in os.listdir(basedir) if
-                           os.path.isdir(subdir := os.path.join(basedir, s)) for d in
-                           os.listdir(subdir) if os.path.isdir(dn := os.path.join(subdir, d))])
+        dirs, fn_c, self.names = zip(*[(dn, os.path.join(dn, "coef.param"), d) for s in os.listdir(basedir) if
+                                       os.path.isdir(subdir := os.path.join(basedir, s)) for d in
+                                       os.listdir(subdir) if os.path.isdir(dn := os.path.join(subdir, d))])
         fn_v, is_label, is_data = zip(*[(os.path.join(d, fn), i != phys_i, i != (len(fl) - 1)) for d in dirs if
                                         (fl := list(filter(lambda n: n[0] == 'v', sorted(os.listdir(d))))) for i, fn
                                         in enumerate(fl) if i >= phys_i])
         self.t = [list(filter(lambda k: k > phys_i,
                               [int(fn.replace('v.', '').replace('.vtk', '')) for fn in os.listdir(d) if
                                fn[:2] == 'v.'])) for
-                  d in self.dirs]
+                  d in dirs]
 
         self.velocities = SeaIceDataset.scale_velocity(read_velocities(fn_v)).to(dev)
         self.data = self.velocities[list(is_data)]
@@ -247,7 +237,7 @@ class FourierData(SeaIceDataset):
                     coef[words[0]] = [float(x) for x in words[2:]]
             f.close()
 
-            ind = slice(j, j + len(t[i]))
+            ind = slice(j, j + len(self.t[i]))
             self.v_a[ind] = self.cyclone(coef, x, y, [self.dt * k for k in self.t[i]])
             j += len(self.t[i])
 
@@ -260,12 +250,14 @@ class FourierData(SeaIceDataset):
 
         # Perform scaling
         self.data = self.data_scaling(self.data)
-        self.label = self.label_scaling(self.label)
+        self.label = torch.tanh(self.label_scaling(self.label) * 10)
         self.v_a = self.v_a_scaling(self.v_a)
         self.H = self.H_scaling(self.H)
         self.A = self.A_scaling(self.A)
+        print(f'data scaling: {self.data_scaling}\nlabel scaling: {self.label_scaling}\n'
+              f'v_a scaling: {self.v_a_scaling}\nH scaling: {self.H_scaling}\nA scaling: {self.A_scaling}')
 
-    def get_test_train_split(self, frac: float = .2):
+    def get_test_train_split(self, frac: float = .2, output: Optional[str] = None):
         split_idx = int(len(self.t) * frac)
         idx = torch.randperm(len(self.t))
         test_idx = idx[:split_idx]
@@ -274,6 +266,9 @@ class FourierData(SeaIceDataset):
         indices: list[list[int]] = [list(range(m, m := (m+len(tx)))) for tx in self.t]
         test_indices = [i for idx in test_idx for i in indices[idx]]
         train_indices = [i for idx in train_idx for i in indices[idx]]
+        if output:
+            with open(f"test_data_{output}.txt", "w") as f:
+                f.write('\n'.join(str(self.names[i]) for i in test_idx))
         return torch.utils.data.Subset(self, test_indices), torch.utils.data.Subset(self, train_indices)
 
     @staticmethod

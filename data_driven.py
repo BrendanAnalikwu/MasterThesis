@@ -33,14 +33,15 @@ def getParameters(model: torch.nn.Module, lr: float = .1):
     return params
 
 
-def train(model, dataset, dev, n_steps=128, main_loss='MSE', job_id=None, betas=(.9, .999), batch_size=8):
-    test_dataset, train_dataset = dataset.get_test_train_split(.2)
-    dataloader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True, drop_last=False)
+def train(model, dataset, dev, n_steps=128, main_loss='MSE', job_id=None, betas=(.9, .999), batch_size=8, save=True):
+    test_dataset, train_dataset = dataset.get_test_train_split(.2, job_id)
+    dataloader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True, drop_last=len(train_dataset) > batch_size)
+    test_dataloader = DataLoader(test_dataset, batch_size=64, shuffle=False, drop_last=len(test_dataset) > 64)
 
     criterion = Loss(main_loss).to(dev)
     test_criterion = Loss(main_loss).to(dev)
-    optim = torch.optim.Adam(getParameters(model, 1e-2), lr=1e-3, betas=betas)
-    # scheduler = ReduceLROnPlateau(optim, patience=100, min_lr=1e-9)
+    optim = torch.optim.Adam(getParameters(model, 1e-3), lr=1e-3, betas=betas)
+    scheduler = ReduceLROnPlateau(optim, patience=10, min_lr=1e-9)
     last_lr = optim.param_groups[0]['lr']
 
     model_id = f"{model.__class__.__name__}_{main_loss}"
@@ -53,14 +54,15 @@ def train(model, dataset, dev, n_steps=128, main_loss='MSE', job_id=None, betas=
 
     reg_n = sum(p.numel() for p in model.parameters())
     regs = []
+    # params = [[p.abs().mean().cpu().detach() for p in model.parameters() if p.dim() > 3]]
 
-    pbar = trange(n_steps, mininterval=1.)
+    pbar = trange(n_steps)
     for i in pbar:
         for (data, H, A, v_a, label) in dataloader:
             # Forward pass and compute output
-            autoencoder_output = model.encoder(label, H, A, v_a)
+            # autoencoder_output = model.encoder(label, H, A, v_a)
             # encoding_output = model.encoder(data, H, A, v_a)
-            output = model.decoder(*autoencoder_output)
+            output = model(data, H, A, v_a)
 
             # Compute losses
             with torch.no_grad():
@@ -76,26 +78,30 @@ def train(model, dataset, dev, n_steps=128, main_loss='MSE', job_id=None, betas=
             optim.step()
             torch.cuda.empty_cache()
 
-            # scheduler.step(np.mean(criterion.results[main_loss][-len(dataloader):]))
-            if optim.param_groups[0]['lr'] != last_lr:
-                last_lr = optim.param_groups[0]['lr']
-                print(f"NEW LEARNING RATE: {last_lr}")
-                pbar.update()
+        scheduler.step(np.mean(criterion.results[main_loss][-len(dataloader):]))
+        if optim.param_groups[0]['lr'] != last_lr:
+            last_lr = optim.param_groups[0]['lr']
+            print(f"NEW LEARNING RATE: {last_lr}")
+            pbar.update()
 
+        # params.append([p.abs().mean().cpu().detach() for p in model.parameters() if p.dim() > 3])
         model.eval()
         with torch.no_grad():
-            t_data, t_H, t_A, t_v_a, t_label = test_dataset[:]
-            test_output = model(t_data, t_H, t_A, t_v_a)
-            test_criterion(test_output, t_label, t_data, t_A, store=True, grad=False)
+            for t_data, t_H, t_A, t_v_a, t_label in test_dataloader:
+                test_output = model(t_data, t_H, t_A, t_v_a)
+                test_criterion(test_output, t_label, t_data, t_A, store=False, grad=False)
+            test_criterion.flush_stack_to_results()
         model.train()
 
-        if i % 5 == 0:
+        if i % 5 == 0 and save:
             torch.save(model, f'model_{model_id}.pt')
             torch.save(criterion.results, f'losses_{model_id}.li')
             torch.save(test_criterion.results, f'test_losses_{model_id}.li')
 
         pbar.set_postfix(loss=np.mean(criterion.results[main_loss][-len(dataloader):]),
-                         test_loss=np.mean(test_criterion.results[main_loss][-len(dataloader):]))
+                         test_loss=test_criterion.results[main_loss][-1],
+                         mse=np.mean(criterion.results['MSE'][-len(dataloader):]),
+                         lr=last_lr)
 
     torch.save(model, f'model_{model_id}.pt')
     torch.save(criterion.results, f'losses_{model_id}.li')
@@ -105,17 +111,29 @@ def train(model, dataset, dev, n_steps=128, main_loss='MSE', job_id=None, betas=
 
 
 if __name__ == "__main__":
-    import sys
+    import argparse
+    parser = argparse.ArgumentParser()
+    parser.add_argument('path', help='Specifies the path used to the data', type=str)
+    parser.add_argument('n_steps', help='Number of epochs', type=int)
+    parser.add_argument('main_loss', help='Name of the loss that is trained on', type=str, choices=Loss.loss_names)
+    parser.add_argument('model_name', help='Name of the model', type=str, choices=['SurrogateNet', 'UNet', 'Noisy', 'Small'])
+    parser.add_argument('-j', '--job_id', help='Slurm job id', type=str, default='0')
+    parser.add_argument('-b', '--betas', type=float, nargs=2, default=[.9, .999])
+    parser.add_argument('-B', '--batch_size', help='Batch size of mini-batches', type=int, default=16)
+    parser.add_argument('-p', '--physical', type=int, default=10, help='Time step after which physical states are assumed')
+    parser.add_argument('-s', '--nosave', help='Specifies if intermediate saving of losses and model is enables', action='store_false')
 
-    data_path = (sys.argv[1])
-    n_steps = int(sys.argv[2])
-    main_loss = str(sys.argv[3])
-    model_name = str(sys.argv[4])  # 'UNet' or else SurrogateNet
-    job_id = sys.argv[5]
-    betas = float(sys.argv[6]), float(sys.argv[7])
-    batch_size = 16
-    if len(sys.argv) == 9:
-        batch_size = int(sys.argv[8])
+    args = parser.parse_args()
+
+    data_path = args.path
+    n_steps = args.n_steps
+    main_loss = args.main_loss
+    model_name = args.model_name  # 'UNet' or else SurrogateNet
+    job_id = args.job_id
+    betas = args.betas
+    batch_size = args.batch_size
+    phys_i = args.physical
+    save = args.nosave
 
     dev = torch.device('cuda') if torch.cuda.is_available() else torch.device('cpu')
 
@@ -128,9 +146,9 @@ if __name__ == "__main__":
     else:
         model = SurrogateNet().to(dev)
 
-    dataset = FourierData(data_path, SeaIceTransform(), dev=dev, phys_i=25)
+    dataset = FourierData(data_path, SeaIceTransform(), dev=dev, phys_i=phys_i)
 
-    model, results = train(model, dataset, dev, n_steps, main_loss, job_id, betas, batch_size)
+    model, results = train(model, dataset, dev, n_steps, main_loss, job_id, betas, batch_size, save)
 
     # # Plot results
     # plot_comparison(model, dataset, 0, 0, patch_size, overlap)
