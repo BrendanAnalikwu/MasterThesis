@@ -119,9 +119,51 @@ def p_value(exp1: str, exp2: str, loss_type: str = 'MCE'):
     return p
 
 
+def plot_losses_avg(exp: str, i: int = 0, loss = 'MSE'):
+    losses = load_losses(exp, i)
+    tlosses = load_losses(f'{exp}/test', i)
+    plt.figure()
+    plt.semilogy([np.mean(losses[loss][i:i + 413]) for i in range(len(losses[loss]) - 413)])
+    plt.semilogy(np.linspace(0, len(losses[loss])-413, len(tlosses[loss])), tlosses[loss])
+    plt.legend(['avg train', 'test'])
+
+
+def get_test_indices(names: str, exp: str, i: int = 0):
+    with open(glob.glob(f'experiments/{exp}/' + r'/test_data_*.txt')[i], 'r', encoding='latin-1') as file:
+        test_names = file.read().split()
+    return [np.where(n == np.array(names))[0][0]for n in np.intersect1d(names, test_names)]
+
+
+def plot_output(exp: str, i: int = 0, img: int = 0, linthresh=1e-2):
+    model = load_model(exp, i)
+    output = model(*dataset[::20][:-1]).detach()[img, 0]
+    label = dataset.label[::20][img, 0]
+    vmin = min(output.min(), label.min())
+    vmax = max(output.max(), label.max())
+    norm = SymLogNorm(linthresh, vmin=vmin, vmax=vmax)
+    f, ax = plt.subplots(1, 2)
+    ax[0].imshow(label, norm=norm)
+    ax[1].imshow(output, norm=norm)
+
+
+is_close_fraction = lambda p: 1 - torch.isclose(p.abs().cpu().detach(), torch.tensor(0.), atol=1e-6).sum() / p.numel()
+absolute_size = lambda p: p.abs().sum().cpu().detach()
+mean_size = lambda p: p.abs().mean().cpu().detach()
+
+
+def plot_parameters(exp: str, i: int = 0, mode=mean_size, fig: int = None, c='None'):
+    plt.figure(fig)
+    plt.semilogy([mode(p) if abs else is_close_fraction(p) for p in load_model(exp, i).parameters() if p.dim() > 3], c=c)
+
+
 if __name__ == "__main__":
     dev = torch.device('cpu')
-    dataset = FourierData("C:/Users/Brend/PycharmProjects/MasterThesis/data/test", dev=dev, phys_i=10)
+    dataset = FourierData("C:/Users/Brend/PycharmProjects/MasterThesis/data/test", dev=dev, phys_i=10,
+                          scaling={'data': (0., torch.tensor([[[[4.1846]], [[3.5026]]]])),
+                                   'label': (0., torch.tensor([[[[1.6487]], [[1.7528]]]])),
+                                   'v_a': (0., torch.tensor([[[[0.0184]], [[0.0184]]]])),
+                                   'H': (0., torch.tensor([[[[1.0179]]]])),
+                                   'A': (0., torch.tensor([[[[1.]]]]))})
     # benchmark = BenchData("C:/Users/Brend/Thesis/GAS/seaice/benchmark/Results8/", list(range(1, 97)), dev)
 
     print('done')
