@@ -1,10 +1,11 @@
+import copy
 from math import ceil
 from typing import Optional, Tuple
 import matplotlib.pyplot as plt
 import numpy as np
 
 import torch
-from torch.optim.lr_scheduler import ReduceLROnPlateau
+from torch.optim.lr_scheduler import MultiStepLR
 from torch.utils.data import DataLoader
 from tqdm import trange
 
@@ -17,6 +18,7 @@ from surrogate_net import SurrogateNet, UNet, NoisySurrogateNet, SmallSurrogateN
 # from torchvision.utils import make_grid
 # from dataset import transform_data
 torch.manual_seed(0)
+patience = 100
 getCoefficientNorm = lambda layer: np.sqrt(1 / (layer.weight.shape[1] * layer.weight.shape[2] * layer.weight.shape[3]))
 
 
@@ -33,7 +35,8 @@ def getParameters(model: torch.nn.Module, lr: float = .1):
     return params
 
 
-def train(model, dataset, dev, n_steps=128, main_loss='MSE', job_id=None, betas=(.9, .999), batch_size=8, save=True):
+def train(model, dataset, dev, n_steps=128, main_loss='MSE', job_id=None, betas=(.9, .999), batch_size=8, alpha=1, noise_lvl=0,
+          save=True):
     test_dataset, train_dataset = dataset.get_test_train_split(.2, job_id)
     dataloader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True, drop_last=len(train_dataset) > batch_size)
     test_dataloader = DataLoader(test_dataset, batch_size=64, shuffle=False, drop_last=len(test_dataset) > 64)
@@ -41,10 +44,14 @@ def train(model, dataset, dev, n_steps=128, main_loss='MSE', job_id=None, betas=
     criterion = Loss(main_loss).to(dev)
     test_criterion = Loss(main_loss).to(dev)
     optim = torch.optim.Adam(getParameters(model, 1e-3), lr=1e-3, betas=betas)
-    scheduler = ReduceLROnPlateau(optim, patience=10, min_lr=1e-9)
+    scheduler = MultiStepLR(optim, milestones=[20], gamma=.1)
     last_lr = optim.param_groups[0]['lr']
+    best_loss = 1e6
+    best_epoch = 0
+    best_model = None
+    num_bad_epochs = 0
 
-    model_id = f"{model.__class__.__name__}_{main_loss}"
+    model_id = f"{model.__class__.__name__}_{main_loss}_{alpha}_{noise_lvl}"
     if job_id:
         model_id += f"_{job_id}"
     else:
@@ -59,18 +66,21 @@ def train(model, dataset, dev, n_steps=128, main_loss='MSE', job_id=None, betas=
     pbar = trange(n_steps)
     for i in pbar:
         for (data, H, A, v_a, label) in dataloader:
+            # Add noise to inputs
+            data += torch.randn_like(data) * data * noise_lvl
+            H += torch.randn_like(H) * H * noise_lvl
+            A += torch.randn_like(A) * A * noise_lvl
+            v_a += torch.randn_like(v_a) * v_a * noise_lvl
             # Forward pass and compute output
-            # autoencoder_output = model.encoder(label, H, A, v_a)
-            # encoding_output = model.encoder(data, H, A, v_a)
             output = model(data, H, A, v_a)
 
             # Compute losses
-            with torch.no_grad():
-                reg = 0
-                for w in model.parameters():
-                    reg += w.norm(1)
-                regs.append((reg / reg_n).item())
-            loss = criterion(output, label, data, A, store=True)  # + .1 * reg / reg_n
+            reg = 0
+            for w in model.parameters():
+                reg += w.norm(1)
+            regs.append((reg / reg_n).item())
+            loss = criterion(output, label, data, A, store=True) + alpha * reg / reg_n
+            criterion.results['regs'].append((reg / reg_n).item())
 
             # Gradient computation and optimiser step
             loss.backward()
@@ -78,7 +88,7 @@ def train(model, dataset, dev, n_steps=128, main_loss='MSE', job_id=None, betas=
             optim.step()
             torch.cuda.empty_cache()
 
-        scheduler.step(np.mean(criterion.results[main_loss][-len(dataloader):]))
+        scheduler.step()
         if optim.param_groups[0]['lr'] != last_lr:
             last_lr = optim.param_groups[0]['lr']
             print(f"NEW LEARNING RATE: {last_lr}")
@@ -91,6 +101,22 @@ def train(model, dataset, dev, n_steps=128, main_loss='MSE', job_id=None, betas=
                 test_output = model(t_data, t_H, t_A, t_v_a)
                 test_criterion(test_output, t_label, t_data, t_A, store=False, grad=False)
             test_criterion.flush_stack_to_results()
+
+        if test_criterion.results[main_loss][-1] < best_loss:
+            best_loss = test_criterion.results[main_loss][-1]
+            best_model = copy.deepcopy(model.state_dict())
+            best_epoch = i
+            num_bad_epochs = 0
+        else:
+            num_bad_epochs += 1
+            if num_bad_epochs >= patience and test_criterion.results[main_loss][-1] > np.mean(criterion.results[main_loss][-len(dataloader):]):
+                print('EARLY STOPPING CRITERION MET')
+                print(f'Best epoch: {best_epoch}')
+                print(f'Best test loss: {best_loss}')
+                torch.save(model, f'overfit_model_{model_id}.pt')
+                model.load_state_dict(best_model)
+                break
+
         model.train()
 
         if i % 5 == 0 and save:
@@ -120,7 +146,9 @@ if __name__ == "__main__":
     parser.add_argument('-j', '--job_id', help='Slurm job id', type=str, default='0')
     parser.add_argument('-b', '--betas', type=float, nargs=2, default=[.9, .999])
     parser.add_argument('-B', '--batch_size', help='Batch size of mini-batches', type=int, default=16)
+    parser.add_argument('-a', '--alpha', help='Regularisation alpha', type=float, default=1.)
     parser.add_argument('-p', '--physical', type=int, default=10, help='Time step after which physical states are assumed')
+    parser.add_argument('-n', '--noiselvl', type=float, default=0., help='Amount of noise to add to training data')
     parser.add_argument('-s', '--nosave', help='Specifies if intermediate saving of losses and model is enables', action='store_false')
 
     args = parser.parse_args()
@@ -132,7 +160,9 @@ if __name__ == "__main__":
     job_id = args.job_id
     betas = args.betas
     batch_size = args.batch_size
+    alpha = args.alpha
     phys_i = args.physical
+    noise_lvl = args.noiselvl
     save = args.nosave
 
     dev = torch.device('cuda') if torch.cuda.is_available() else torch.device('cpu')
@@ -148,7 +178,7 @@ if __name__ == "__main__":
 
     dataset = FourierData(data_path, SeaIceTransform(), dev=dev, phys_i=phys_i)
 
-    model, results = train(model, dataset, dev, n_steps, main_loss, job_id, betas, batch_size, save)
+    model, results = train(model, dataset, dev, n_steps, main_loss, job_id, betas, batch_size, alpha, noise_lvl, save)
 
     # # Plot results
     # plot_comparison(model, dataset, 0, 0, patch_size, overlap)

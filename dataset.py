@@ -268,7 +268,7 @@ class FourierData(SeaIceDataset):
         train_indices = [i for idx in train_idx for i in indices[idx]]
         if output:
             with open(f"test_data_{output}.txt", "w") as f:
-                f.write('\n'.join(str(self.names[i]) for i in test_idx))
+                f.write('\n'.join(np.sort([str(self.names[i]) for i in test_idx])))
         return torch.utils.data.Subset(self, test_indices), torch.utils.data.Subset(self, train_indices)
 
     @staticmethod
