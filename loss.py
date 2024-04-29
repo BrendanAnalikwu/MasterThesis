@@ -150,13 +150,13 @@ integration_filter = torch.stack((integration_filter, integration_filter))
 def integration_B_grid(vertex: torch.Tensor, cell: torch.Tensor, dx: float):
     filter = integration_filter.to(vertex.device)
 
-    res = torch.mul(torch.nn.functional.conv2d(vertex[:, :, 1:, :-1], filter, groups=2), cell[:, None, 1:, :-1])
+    res = torch.mul(torch.nn.functional.conv2d(vertex[:, :, 1:, :-1], filter, groups=2), cell[:, :, 1:, :-1])
     res += torch.mul(torch.nn.functional.conv2d(vertex[:, :, 1:, 1:], torch.flip(filter, [3]), groups=2),
-                     cell[:, None, 1:, 1:])
+                     cell[:, :, 1:, 1:])
     res += torch.mul(torch.nn.functional.conv2d(vertex[:, :, :-1, :-1], torch.flip(filter, [2]), groups=2),
-                     cell[:, None, :-1, :-1])
+                     cell[:, :, :-1, :-1])
     res += torch.mul(torch.nn.functional.conv2d(vertex[:, :, :-1, 1:], torch.flip(filter, [2, 3]), groups=2),
-                     cell[:, None, :-1, 1:])
+                     cell[:, :, :-1, 1:])
 
     return res * dx ** 2 / 36
 
@@ -404,11 +404,13 @@ def weighted_mse_loss(input, target):
     return ((input - target).square() / target.square().mean(dim=(1, 2, 3), keepdim=True).sqrt()).mean()
 
 
-def mean_relative_loss(dv: torch.Tensor, label: torch.Tensor, v: Optional[torch.Tensor] = None, eps: float = 1e-4):
+def mean_relative_loss(dv: torch.Tensor, label: torch.Tensor, v: Optional[torch.Tensor] = None, eps: float = 1e-4,
+                       reduction='mean'):
     if v is not None:
-        return ((dv - label).norm(2, -3) / ((label + v).norm(2, -3) + eps)).mean()
+        res = (dv - label).norm(2, -3) / ((label + v).norm(2, -3) + eps)
     else:
-        return ((dv - label).norm(2, -3) / (label.norm(2, -3) + eps)).mean()
+        res = (dv - label).norm(2, -3) / (label.norm(2, -3) + eps)
+    return res.mean() if reduction == 'mean' else res
 
 
 class Loss(torch.nn.Module):

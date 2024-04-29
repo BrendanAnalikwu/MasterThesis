@@ -17,7 +17,7 @@ if __name__ == '__main__':
     e_2 = .5
     C = 20
     f_c = 1.46e-4
-    dx = 512e3 / 128 / L  # 4km
+    dx = 512e3 / 256 / L  # 2km
     dt = 1e3 / T  # 1000s
 
     # Initial conditions
