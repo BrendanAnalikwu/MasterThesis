@@ -3,7 +3,7 @@ from abc import ABC
 from collections import defaultdict
 from math import cos, sin, pi, sqrt, exp
 from random import randint, getrandbits
-from typing import List, Optional, Union
+from typing import List, Optional, Union, Tuple, Any
 
 import numpy as np
 import torch
@@ -180,16 +180,51 @@ class InstanceNorm(BaseNorm):
 class MinMaxNorm(BaseNorm):
     dims = (0, 2, 3)
 
-    def __init__(self, x: torch.Tensor, eps=1e-6, transforms=True, velocity=True):
+    def __init__(self, x: Optional[torch.Tensor] = None, eps=1e-6, transforms=True, velocity=True):
         self.mean = 0.
-        self.std = x.abs().amax(dim=self.dims, keepdim=True) - self.mean
+        if x is not None:
+            self.mean = 0.
+            self.std = x.abs().amax(dim=self.dims, keepdim=True) - self.mean
+        else:
+            self.mean = 0.
+            self.std = 1.
+
+
+class LabelScaling(BaseNorm):
+    def __init__(self, norm: BaseNorm):
+        self.norm = norm
+
+    def __call__(self, x: torch.Tensor):
+        return torch.tanh(self.norm.inverse(x) * 10)
+
+    def inverse(self, x: torch.Tensor):
+        return torch.arctanh(self.norm(x)).clip(-10, 10) / 10
+
+    @property
+    def mean(self):
+        return self.norm.mean
+
+    @mean.setter
+    def mean(self, val):
+        self.norm.mean = val
+
+    @property
+    def std(self):
+        return self.norm.std
+
+    @std.setter
+    def std(self, val):
+        self.norm.std = val
+
+    def __repr__(self):
+        return f'LabelScaling using {self.norm}'
 
 
 class FourierData(SeaIceDataset):
     dt = 2.
 
     def __init__(self, basedir: str, transform: Optional[SeaIceTransform] = None, dev: torch.device = 'cpu',
-                 phys_i: int = 0):
+                 phys_i: int = 0, scaling: Optional[dict[str, Tuple]] = None):
         self.transform = transform
         dirs, fn_c, self.names = zip(*[(dn, os.path.join(dn, "coef.param"), d) for s in os.listdir(basedir) if
                                        os.path.isdir(subdir := os.path.join(basedir, s)) for d in
@@ -242,15 +277,32 @@ class FourierData(SeaIceDataset):
             j += len(self.t[i])
 
         # Get transforms
-        self.data_scaling = MinMaxNorm(self.data)
-        self.label_scaling = MinMaxNorm(self.label)
-        self.v_a_scaling = MinMaxNorm(self.v_a)
-        self.H_scaling = MinMaxNorm(self.H, velocity=False)
-        self.A_scaling = MinMaxNorm(self.A, velocity=False)
+        if scaling:
+            self.data_scaling = MinMaxNorm()
+            self.label_scaling = LabelScaling(MinMaxNorm())
+            self.v_a_scaling = MinMaxNorm()
+            self.H_scaling = MinMaxNorm()
+            self.A_scaling = MinMaxNorm()
+            self.data_scaling.mean = scaling['data'][0]
+            self.data_scaling.std = scaling['data'][1]
+            self.label_scaling.mean = scaling['label'][0]
+            self.label_scaling.std = scaling['label'][1]
+            self.v_a_scaling.mean = scaling['v_a'][0]
+            self.v_a_scaling.std = scaling['v_a'][1]
+            self.H_scaling.mean = scaling['H'][0]
+            self.H_scaling.std = scaling['H'][1]
+            self.A_scaling.mean = scaling['A'][0]
+            self.A_scaling.std = scaling['A'][1]
+        else:
+            self.data_scaling = MinMaxNorm(self.data)
+            self.label_scaling = LabelScaling(MinMaxNorm(self.label))
+            self.v_a_scaling = MinMaxNorm(self.v_a)
+            self.H_scaling = MinMaxNorm(self.H, velocity=False)
+            self.A_scaling = MinMaxNorm(self.A, velocity=False)
 
         # Perform scaling
         self.data = self.data_scaling(self.data)
-        self.label = torch.tanh(self.label_scaling(self.label) * 10)
+        self.label = self.label_scaling(self.label)
         self.v_a = self.v_a_scaling(self.v_a)
         self.H = self.H_scaling(self.H)
         self.A = self.A_scaling(self.A)
