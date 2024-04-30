@@ -10,24 +10,24 @@ import torch
 from torch.utils.data import Dataset
 from torch.utils.data.dataset import T_co
 from torchvision.utils import make_grid
-from tqdm import trange
+from tqdm import trange, tqdm
 
 from generate_data import read_vtk2
 
 
-def read_velocities(filenames: List[str]):
+def read_velocities(filenames: List[str], silent=True):
     res = torch.zeros((len(filenames), 2, 257, 257))
-    for i, fn in zip(trange(len(filenames)), filenames):
+    for i, fn in zip(trange(len(filenames), disable=silent), filenames):
         data = read_vtk2(fn, True, indexing='ij')
         res[i, 0] = torch.tensor(data[:, 0].reshape((257, 257)), dtype=torch.float)
         res[i, 1] = torch.tensor(data[:, 1].reshape((257, 257)), dtype=torch.float)
     return res
 
 
-def read_HA(filenames: List[str]):
+def read_HA(filenames: List[str], silent=True):
     H = torch.zeros((len(filenames), 1, 256, 256))
     A = torch.zeros((len(filenames), 1, 256, 256))
-    for i, fn in zip(trange(len(filenames)), filenames):
+    for i, fn in zip(trange(len(filenames), disable=silent), filenames):
         data = read_vtk2(fn, False, indexing='ij')
         H[i] = torch.tensor(data[:, 0].reshape((1, 256, 256)), dtype=torch.float)
         A[i] = torch.tensor(data[:, 1].reshape((1, 256, 256)), dtype=torch.float)
@@ -230,11 +230,11 @@ class FourierData(SeaIceDataset):
                                        os.path.isdir(subdir := os.path.join(basedir, s)) for d in
                                        os.listdir(subdir) if os.path.isdir(dn := os.path.join(subdir, d))])
         fn_v, is_label, is_data = zip(*[(os.path.join(d, fn), i != phys_i, i != (len(fl) - 1)) for d in dirs if
-                                        (fl := list(filter(lambda n: n[0] == 'v', sorted(os.listdir(d))))) for i, fn
+                                        (fl := list(filter(lambda n: n[0] == 'v' and n[-3:] == 'vtk', sorted(os.listdir(d))))) for i, fn
                                         in enumerate(fl) if i >= phys_i])
         self.t = [list(filter(lambda k: k > phys_i,
                               [int(fn.replace('v.', '').replace('.vtk', '')) for fn in os.listdir(d) if
-                               fn[:2] == 'v.'])) for
+                               fn[:2] == 'v.' and fn[-3:] == 'vtk'])) for
                   d in dirs]
 
         self.velocities = SeaIceDataset.scale_velocity(read_velocities(fn_v)).to(dev)
@@ -511,3 +511,29 @@ def transform_data(data, H, A, v_a, v_o, label, patch_size: int = 3, overlap: in
     border_chunks = border_chunks + border_chunks.transpose(1, 2)
     border_chunks = border_chunks.reshape(-1, 1, 1, 1).to(torch.float32)
     return data, H, A, v_a, v_o, border_chunks, label
+
+
+if __name__ == "__main__":
+    import argparse
+    parser = argparse.ArgumentParser()
+    parser.add_argument('path', help='Specifies the path used for the data', type=str)
+    parser.add_argument('storage', help='Specifies the path used for the data', type=str)
+    args = parser.parse_args()
+    data_path = args.path
+    storage_path = args.storage
+
+    dirs = [(dn, d) for s in os.listdir(data_path) if
+            os.path.isdir(subdir := os.path.join(data_path, s)) for d in
+            os.listdir(subdir) if os.path.isdir(dn := os.path.join(subdir, d))]
+    for d, n in tqdm(dirs):
+        if os.path.isfile(os.path.join(storage_path, n, f'v{n}.tensor')):
+            continue
+        fn_v = [os.path.join(d, fn) for fn in list(filter(lambda f: f[0] == 'v' and f[-3:] == 'vtk', sorted(os.listdir(d))))]
+        velocities = read_velocities(fn_v, True)
+        torch.save(velocities, os.path.join(storage_path, n, f'v{n}.tensor'))
+
+        fn_dgh = [os.path.join(d, fn) for fn in list(filter(lambda f: f[:3] == 'dgh' and f[-3:] == 'vtk', sorted(os.listdir(d))))]
+        H, A = read_HA(fn_dgh, True)
+        torch.save(H, os.path.join(storage_path, n, f'H{n}.tensor'))
+        torch.save(A, os.path.join(storage_path, n, f'A{n}.tensor'))
+
