@@ -195,10 +195,10 @@ class LabelScaling(BaseNorm):
         self.norm = norm
 
     def __call__(self, x: torch.Tensor):
-        return torch.tanh(self.norm.inverse(x) * 10)
+        return torch.tanh(self.norm(x) * 10)
 
     def inverse(self, x: torch.Tensor):
-        return torch.arctanh(self.norm(x)).clip(-10, 10) / 10
+        return self.norm.inverse(torch.arctanh(x).clip(-10, 10) / 10)
 
     @property
     def mean(self):
