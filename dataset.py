@@ -229,22 +229,20 @@ class FourierData(SeaIceDataset):
         dirs, fn_c, self.names = zip(*[(dn, os.path.join(dn, "coef.param"), d) for s in os.listdir(basedir) if
                                        os.path.isdir(subdir := os.path.join(basedir, s)) for d in
                                        os.listdir(subdir) if os.path.isdir(dn := os.path.join(subdir, d))])
-        fn_v, is_label, is_data = zip(*[(os.path.join(d, fn), i != phys_i, i != (len(fl) - 1)) for d in dirs if
-                                        (fl := list(filter(lambda n: n[0] == 'v' and n[-3:] == 'vtk', sorted(os.listdir(d))))) for i, fn
-                                        in enumerate(fl) if i >= phys_i])
-        self.t = [list(filter(lambda k: k > phys_i,
-                              [int(fn.replace('v.', '').replace('.vtk', '')) for fn in os.listdir(d) if
-                               fn[:2] == 'v.' and fn[-3:] == 'vtk'])) for
-                  d in dirs]
 
-        self.velocities = SeaIceDataset.scale_velocity(read_velocities(fn_v)).to(dev)
+        raw_velocities = [torch.load(os.path.join(d, f'v{n}.tensor')) for d, n in zip(dirs, self.names)]
+
+        self.t = [list(range(phys_i, len(v))) for v in raw_velocities]
+        self.velocities = torch.cat([v[phys_i:] for v in raw_velocities]).to(dev)
+        is_label, is_data = zip(*[(i != phys_i, i != max(t)) for t in self.t for i in t])
+
         self.data = self.velocities[list(is_data)]
         self.label = self.velocities[list(is_label)] - self.data
-        fn_dgh = [os.path.join(d, fn) for d in dirs for i, fn in
-                  enumerate(sorted(filter(lambda fn: fn[:3] == 'dgh', os.listdir(d)))) if i >= phys_i]
-        self.H, self.A = read_HA(fn_dgh)
-        self.H = self.H.to(dev)
-        self.A = self.A.to(dev)
+
+        raw_H = [torch.load(os.path.join(d, f'H{n}.tensor')) for d, n in zip(dirs, self.names)]
+        self.H = torch.cat([h[phys_i:] for h in raw_H]).to(dev)
+        raw_A = [torch.load(os.path.join(d, f'A{n}.tensor')) for d, n in zip(dirs, self.names)]
+        self.A = torch.cat([a[phys_i:] for a in raw_A]).to(dev)
 
         self.v_a = torch.empty_like(self.data)
 
