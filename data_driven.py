@@ -150,6 +150,7 @@ if __name__ == "__main__":
     parser.add_argument('-a', '--alpha', help='Regularisation alpha', type=float, default=1.)
     parser.add_argument('-p', '--physical', type=int, default=10, help='Time step after which physical states are assumed')
     parser.add_argument('-n', '--noiselvl', type=float, default=0., help='Amount of noise to add to training data')
+    parser.add_argument('-d', '--dataset_size', type=int, default=None, help='Size of dataset')
     parser.add_argument('-s', '--nosave', help='Specifies if intermediate saving of losses and model is enables', action='store_false')
 
     args = parser.parse_args()
@@ -164,6 +165,7 @@ if __name__ == "__main__":
     alpha = args.alpha
     phys_i = args.physical
     noise_lvl = args.noiselvl
+    dataset_size = args.dataset_size
     save = args.nosave
 
     dev = torch.device('cuda') if torch.cuda.is_available() else torch.device('cpu')
@@ -177,7 +179,7 @@ if __name__ == "__main__":
     else:
         model = SurrogateNet().to(dev)
 
-    dataset = FourierData(data_path, SeaIceTransform(), dev=dev, phys_i=phys_i)
+    dataset = FourierData(data_path, SeaIceTransform(), dev=dev, phys_i=phys_i, max_size=dataset_size)
 
     model, results = train(model, dataset, dev, n_steps, main_loss, job_id, betas, batch_size, alpha, noise_lvl, save)
 

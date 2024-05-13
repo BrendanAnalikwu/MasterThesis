@@ -224,11 +224,15 @@ class FourierData(SeaIceDataset):
     dt = 2.
 
     def __init__(self, basedir: str, transform: Optional[SeaIceTransform] = None, dev: torch.device = 'cpu',
-                 phys_i: int = 0, scaling: Optional[dict[str, Tuple]] = None):
+                 phys_i: int = 0, scaling: Optional[dict[str, Tuple]] = None, max_size: Optional[int] = None):
         self.transform = transform
         dirs, fn_c, self.names = zip(*[(dn, os.path.join(dn, "coef.param"), d) for s in os.listdir(basedir) if
                                        os.path.isdir(subdir := os.path.join(basedir, s)) for d in
                                        os.listdir(subdir) if os.path.isdir(dn := os.path.join(subdir, d))])
+        if max_size:
+            dirs = dirs[:max_size]
+            fn_c = fn_c[:max_size]
+            self.names = self.names[:max_size]
 
         raw_velocities = [torch.load(os.path.join(d, f'v{n}.tensor')) for d, n in zip(dirs, self.names)]
 
@@ -270,9 +274,9 @@ class FourierData(SeaIceDataset):
                     coef[words[0]] = [float(x) for x in words[2:]]
             f.close()
 
-            ind = slice(j, j + len(self.t[i]))
-            self.v_a[ind] = self.cyclone(coef, x, y, [self.dt * k for k in self.t[i]])
-            j += len(self.t[i])
+            ind = slice(j, j + len(self.t[i][1:]))
+            self.v_a[ind] = self.cyclone(coef, x, y, [self.dt * k for k in self.t[i][1:]])
+            j += len(self.t[i][1:])
 
         # Get transforms
         if scaling:
@@ -313,7 +317,7 @@ class FourierData(SeaIceDataset):
         test_idx = idx[:split_idx]
         train_idx = idx[split_idx:]
         m = 0
-        indices: list[list[int]] = [list(range(m, m := (m+len(tx)))) for tx in self.t]
+        indices: list[list[int]] = [list(range(m, m := (m+len(tx[1:])))) for tx in self.t]
         test_indices = [i for idx in test_idx for i in indices[idx]]
         train_indices = [i for idx in train_idx for i in indices[idx]]
         if output:
