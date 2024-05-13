@@ -159,10 +159,10 @@ def plot_parameters(exp: str, i: int = 0, mode=mean_size, fig: int = None, c='No
 if __name__ == "__main__":
     dev = torch.device('cpu')
     dataset = FourierData("C:/Users/Brend/PycharmProjects/MasterThesis/data/test", dev=dev, phys_i=10,
-                          scaling={'data': (0., torch.tensor([[[[4.1846]], [[3.5026]]]])),
-                                   'label': (0., torch.tensor([[[[1.6487]], [[1.7528]]]])),
-                                   'v_a': (0., torch.tensor([[[[0.0184]], [[0.0184]]]])),
-                                   'H': (0., torch.tensor([[[[1.0179]]]])),
+                          scaling={'data': (0., torch.tensor([[[[0.0004184620047453791]], [[0.0003502570034470409]]]])),
+                                   'label': (0., torch.tensor([[[[0.0001648720062803477]], [[0.00017528010357636958]]]])),
+                                   'v_a': (0., torch.tensor([[[[0.018403656780719757]], [[0.018403703346848488]]]])),
+                                   'H': (0., torch.tensor([[[[1.0179400444030762]]]])),
                                    'A': (0., torch.tensor([[[[1.]]]]))})
     # benchmark = BenchData("C:/Users/Brend/Thesis/GAS/seaice/benchmark/Results8/", list(range(1, 97)), dev)
 

@@ -118,7 +118,7 @@ class BaseNorm(object):
         return x * self.std + self.mean
 
     def __repr__(self):
-        return f'{self.__class__.__name__} object with mean = {self.mean} and std = {self.std}'
+        return f'{self.__class__.__name__} object with mean = {self.mean} and std = {self.std if isinstance(self.std, float) else self.std.tolist()}'
 
 
 class PixelNorm(BaseNorm):
