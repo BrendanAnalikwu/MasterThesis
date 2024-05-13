@@ -67,10 +67,11 @@ def train(model, dataset, dev, n_steps=128, main_loss='MSE', job_id=None, betas=
     for i in pbar:
         for (data, H, A, v_a, label) in dataloader:
             # Add noise to inputs
-            data += torch.randn_like(data) * data * noise_lvl
-            H += torch.randn_like(H) * H * noise_lvl
-            A += torch.randn_like(A) * A * noise_lvl
-            v_a += torch.randn_like(v_a) * v_a * noise_lvl
+            if i < 1000:
+                data += torch.randn_like(data) * data * noise_lvl
+                H += torch.randn_like(H) * H * noise_lvl
+                A += torch.randn_like(A) * A * noise_lvl
+                v_a += torch.randn_like(v_a) * v_a * noise_lvl
             # Forward pass and compute output
             output = model(data, H, A, v_a)
 
