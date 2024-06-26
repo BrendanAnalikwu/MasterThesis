@@ -156,6 +156,18 @@ def plot_parameters(exp: str, i: int = 0, mode=mean_size, fig: int = None, c='No
     plt.semilogy([mode(p) if abs else is_close_fraction(p) for p in load_model(exp, i).parameters() if p.dim() > 3], c=c)
 
 
+def require_gradient(dataset: SeaIceDataset):
+    dataset.data.requires_grad = True
+    dataset.H.requires_grad = True
+    dataset.A.requires_grad = True
+    dataset.v_a.requires_grad = True
+
+
+def compute_sensitivity(model: torch.nn.Module, im: int):
+    output = model(*dataset[slice(im, im + 1)][:-2])
+    gg = sum([torch.autograd.grad(output[0, 0, i, j], dataset.data, retain_graph=True)[0][im].abs().sum(dim=0) for i in range(257) for j in range(257)])
+
+
 if __name__ == "__main__":
     dev = torch.device('cpu')
     dataset = FourierData("C:/Users/Brend/PycharmProjects/MasterThesis/data/test", dev=dev, phys_i=10,
@@ -177,3 +189,10 @@ if __name__ == "__main__":
 # cb = f.colorbar(im, cax=cbar, ticks = [-5e-6, -1e-6, -5e-7, 0, 5e-7, 1e-6, 5e-6], format=ticker.LogFormatterMathtext(labelOnlyBase=False))
 # cb.set_ticklabels([-5e-6, -1e-6, -5e-7, 0, 5e-7, 1e-6, 5e-6])
 # cb.ax.yaxis.set_major_formatter(ticker.ScalarFormatter(useMathText=True))
+
+# model = load_model('time', 3)
+#
+#
+# output = model(*dataset[219:220][:-2])
+#
+# gg = sum([torch.autograd.grad(output[0,0,i,j], dataset.data, retain_graph=True)[0][219].abs().sum(dim=0) for i in range(257) for j in range(257)])
