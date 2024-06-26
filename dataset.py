@@ -44,12 +44,12 @@ class SeaIceDataset(Dataset, ABC):
     H: torch.Tensor
     A: torch.Tensor
     v_a: torch.Tensor
-    # v_o: torch.Tensor
+    v_o: torch.Tensor
     label: torch.Tensor
     transform = None
 
     def retrieve(self, index) -> T_co:
-        return self.data[index], self.H[index], self.A[index], self.v_a[index], self.label[index]
+        return self.data[index], self.H[index], self.A[index], self.v_a[index], self.v_o[index], self.label[index]
 
     def __getitem__(self, index) -> T_co:
         sample = self.retrieve(index)
@@ -72,12 +72,13 @@ class SeaIceTransform(object):
         if flip is None:
             flip = bool(getrandbits(1))
 
-        data, H, A, v_a, label = sample
+        data, H, A, v_a, v_o, label = sample
         with torch.no_grad():
             return (self.transform_velocity(data, rot, flip),
                     self.transform_quantity(H, rot, flip),
                     self.transform_quantity(A, rot, flip),
                     self.transform_velocity(v_a, rot, flip),
+                    torch.ones_like(v_o) * flip,
                     self.transform_velocity(label, rot, flip))
 
     @staticmethod
@@ -226,9 +227,9 @@ class FourierData(SeaIceDataset):
     def __init__(self, basedir: str, transform: Optional[SeaIceTransform] = None, dev: torch.device = 'cpu',
                  phys_i: int = 0, scaling: Optional[dict[str, Tuple]] = None, max_size: Optional[int] = None):
         self.transform = transform
-        dirs, fn_c, self.names = zip(*[(dn, os.path.join(dn, "coef.param"), d) for s in os.listdir(basedir) if
+        dirs, fn_c, self.names = zip(*[(dn, os.path.join(dn, "coef.param"), d) for s in sorted(os.listdir(basedir)) if
                                        os.path.isdir(subdir := os.path.join(basedir, s)) for d in
-                                       os.listdir(subdir) if os.path.isdir(dn := os.path.join(subdir, d))])
+                                       sorted(os.listdir(subdir)) if os.path.isdir(dn := os.path.join(subdir, d))])
         if max_size:
             dirs = dirs[:max_size]
             fn_c = fn_c[:max_size]
@@ -310,6 +311,8 @@ class FourierData(SeaIceDataset):
         self.A = self.A_scaling(self.A)
         print(f'data scaling: {self.data_scaling}\nlabel scaling: {self.label_scaling}\n'
               f'v_a scaling: {self.v_a_scaling}\nH scaling: {self.H_scaling}\nA scaling: {self.A_scaling}')
+
+        self.v_o = torch.zeros(len(self.data), device=dev)
 
     def get_test_train_split(self, frac: float = .2, output: Optional[str] = None):
         split_idx = int(len(self.t) * frac)

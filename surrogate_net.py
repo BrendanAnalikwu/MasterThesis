@@ -204,7 +204,7 @@ class UNet(torch.nn.Module):
                                           # SymmetricExponentialUnit())  # ,
                                             # torch.nn.InstanceNorm2d(2, affine=False))  # 257 -> 257
 
-    def forward(self,  v, H, A, v_a):
+    def forward(self,  v, H, A, v_a, v_o):
         x = self.input_activation(self.input_layer_v(torch.cat((v, v_a), 1))
                                   + self.input_layer_HA(torch.cat((H, A), 1)))
         x1 = self.input_conv(x)

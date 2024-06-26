@@ -60,7 +60,7 @@ def train(model, dataset, dev, n_steps=128, main_loss='MSE', job_id=None, betas=
 
     pbar = trange(n_steps)
     for i in pbar:
-        for (data, H, A, v_a, label) in dataloader:
+        for (data, H, A, v_a, v_o, label) in dataloader:
             # Add noise to inputs
             # if i < 1000:
             data += torch.randn_like(data) * data * noise_lvl
@@ -68,7 +68,7 @@ def train(model, dataset, dev, n_steps=128, main_loss='MSE', job_id=None, betas=
             A += torch.randn_like(A) * A * noise_lvl
             v_a += torch.randn_like(v_a) * v_a * noise_lvl
             # Forward pass and compute output
-            output = model(data, H, A, v_a)
+            output = model(data, H, A, v_a, v_o)
 
             # Compute losses
             reg = 0
@@ -94,8 +94,8 @@ def train(model, dataset, dev, n_steps=128, main_loss='MSE', job_id=None, betas=
         # params.append([p.abs().mean().cpu().detach() for p in model.parameters() if p.dim() > 3])
         model.eval()
         with torch.no_grad():
-            for t_data, t_H, t_A, t_v_a, t_label in test_dataloader:
-                test_output = model(t_data, t_H, t_A, t_v_a)
+            for t_data, t_H, t_A, t_v_a, t_v_o, t_label in test_dataloader:
+                test_output = model(t_data, t_H, t_A, t_v_a, t_v_o)
                 test_criterion(test_output, t_label, t_data, t_A, store=False, grad=False)
             test_criterion.flush_stack_to_results()
 
