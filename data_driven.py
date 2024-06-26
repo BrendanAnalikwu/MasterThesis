@@ -31,15 +31,15 @@ def getParameters(model: torch.nn.Module, lr: float = .1):
 
 
 def train(model, dataset, dev, n_steps=128, main_loss='MSE', job_id=None, betas=(.9, .999), batch_size=8, alpha=1, noise_lvl=0,
-          save=True):
+          save=True, learning_rate=1e-3, weight=1, eps=1e-2):
     test_dataset, train_dataset = dataset.get_test_train_split(.2, job_id)
     dataloader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True, drop_last=len(train_dataset) > batch_size)
     test_dataloader = DataLoader(test_dataset, batch_size=64, shuffle=False, drop_last=len(test_dataset) > 64)
 
-    criterion = Loss(main_loss).to(dev)
-    test_criterion = Loss(main_loss).to(dev)
-    optim = torch.optim.Adam(getParameters(model, 1e-3), lr=1e-3, betas=betas)
-    scheduler = MultiStepLR(optim, milestones=[20], gamma=.1)
+    criterion = Loss(main_loss, mre_eps=eps, weight=weight).to(dev)
+    test_criterion = Loss(main_loss, mre_eps=eps, weight=weight).to(dev)
+    optim = torch.optim.Adam(getParameters(model, learning_rate), lr=learning_rate, betas=betas)
+    # scheduler = MultiStepLR(optim, milestones=[20], gamma=.1)
     last_lr = optim.param_groups[0]['lr']
     best_loss = 1e6
     best_epoch = 0
@@ -85,7 +85,7 @@ def train(model, dataset, dev, n_steps=128, main_loss='MSE', job_id=None, betas=
             optim.step()
             torch.cuda.empty_cache()
 
-        scheduler.step()
+        # scheduler.step()
         if optim.param_groups[0]['lr'] != last_lr:
             last_lr = optim.param_groups[0]['lr']
             print(f"NEW LEARNING RATE: {last_lr}")
@@ -130,7 +130,7 @@ def train(model, dataset, dev, n_steps=128, main_loss='MSE', job_id=None, betas=
     torch.save(criterion.results, f'losses_{model_id}.li')
     torch.save(test_criterion.results, f'test_losses_{model_id}.li')
 
-    return model, criterion.results
+    return model, criterion.results, test_criterion.results
 
 
 if __name__ == "__main__":
@@ -177,7 +177,8 @@ if __name__ == "__main__":
 
     dataset = FourierData(data_path, SeaIceTransform(), dev=dev, phys_i=phys_i, max_size=dataset_size)
 
-    model, results = train(model, dataset, dev, n_steps, main_loss, job_id, betas, batch_size, alpha, noise_lvl, save)
+    model, results, test_results = train(model, dataset, dev, n_steps, main_loss, job_id, betas, batch_size, alpha,
+                                         noise_lvl, save)
 
     # # Plot results
     # plot_comparison(model, dataset, 0, 0, patch_size, overlap)

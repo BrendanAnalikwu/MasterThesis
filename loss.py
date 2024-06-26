@@ -416,13 +416,14 @@ def mean_relative_loss(dv: torch.Tensor, label: torch.Tensor, v: Optional[torch.
 class Loss(torch.nn.Module):
     loss_names = ['MAE', 'MSE', 'SRE', 'MSE+SRE', 'MSE+MRE', 'MSE+MRDE', 'MSE+SRE+MRDE']
 
-    def __init__(self, main_loss: str = 'MSE', mre_eps: float = 1e-2, mrde_eps: float = 1e-2, *args, **kwargs):
+    def __init__(self, main_loss: str = 'MSE', mre_eps: float = 1e-2, mrde_eps: float = 1e-2, weight=.1, *args, **kwargs):
         super().__init__(*args, **kwargs)
         assert main_loss in self.loss_names
         self.main = main_loss
         self.results = defaultdict(list)
         self.mre_eps = mre_eps
         self.mrde_eps = mrde_eps
+        self.weight = weight
         self.stack = []
 
     def forward(self, dv: torch.Tensor, label: torch.Tensor, v_old: torch.Tensor, A: torch.tensor,
@@ -433,10 +434,10 @@ class Loss(torch.nn.Module):
             mse = torch.nn.functional.mse_loss(dv, label)
         with torch.set_grad_enabled('SRE' in self.main and grad):
             sre = strain_rate_loss(dv, label)
-            msesre = mse + sre
+            msesre = mse + self.weight * sre
         with torch.set_grad_enabled('MRE' in self.main and grad):
             mre = mean_relative_loss(dv, label, v_old, eps=self.mre_eps)
-            msemre = mse + .1 * mre
+            msemre = mse + self.weight * mre
         with torch.set_grad_enabled('MRDE' in self.main and grad):
             mrde = mean_relative_loss(dv, label, eps=self.mrde_eps)
             msemrde = mse + mrde
