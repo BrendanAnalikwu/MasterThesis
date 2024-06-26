@@ -79,6 +79,7 @@ def train(model, dataset, dev, n_steps=128, main_loss='MSE', job_id=None, betas=
             criterion.results['regs'].append((reg / reg_n).item())
 
             # Gradient computation and optimiser step
+            optim.zero_grad()
             loss.backward()
             torch.nn.utils.clip_grad_norm_(model.parameters(), 1.)
             optim.step()
