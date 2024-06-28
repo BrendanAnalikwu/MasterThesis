@@ -2,6 +2,8 @@ from typing import Tuple
 
 import torch
 
+from dataset import SeaIceTransform
+
 
 class PatchNet(torch.nn.Module):
     def __init__(self, overlap: int = 1, out_size: int = 3, n_hidden: Tuple[int, int, int] = (16, 32, 64), complexity=0,
@@ -62,39 +64,43 @@ class PatchNet(torch.nn.Module):
 class SurrogateNet(torch.nn.Module):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        self.input_layer_v = torch.nn.Conv2d(6, 16, 3, 1, 0, bias=False)  # -> -2
-        self.input_layer_HA = torch.nn.Conv2d(2, 16, 2, 1, 0, bias=False)  # -> -1
-        self.input_activation = torch.nn.Sequential(torch.nn.BatchNorm2d(16), torch.nn.GELU())
+        self.input_layer_v = torch.nn.Conv2d(6, 128, 17, 16, 0)  # 257 -> 616
+        self.input_layer_HA = torch.nn.Conv2d(2, 128, 16, 16, 0)  # 256 -> 16
+        self.input_activation = torch.nn.Sequential(torch.nn.BatchNorm2d(128), torch.nn.GELU())
 
-        self.encoder = torch.nn.Sequential(torch.nn.Conv2d(16, 128, 17, 16, 1),
-                                           torch.nn.BatchNorm2d(128),
-                                           torch.nn.GELU(),
-                                           torch.nn.Conv2d(128, 512, 4, 4, 0),
+        self.encoder = torch.nn.Sequential(torch.nn.Conv2d(128, 512, 4, 4, 0),  # 16 -> 4
                                            torch.nn.BatchNorm2d(512),
                                            torch.nn.GELU(),
-                                           torch.nn.Conv2d(512, 1024, 4, 1, 0),
+                                           torch.nn.Conv2d(512, 1024, 4, 1, 0),  # 4 -> 1
                                            torch.nn.BatchNorm2d(1024),
                                            torch.nn.GELU())
         self.bottleneck = torch.nn.Sequential(torch.nn.Flatten(1, -1),
                                               torch.nn.Linear(1024, 1024),
-                                              # torch.nn.BatchNorm2d(128),
                                               torch.nn.GELU(),
                                               torch.nn.Unflatten(1, (1024, 1, 1))
                                               )
-        self.decoder = torch.nn.Sequential(torch.nn.ConvTranspose2d(1024, 512, 8, 1, 0),
+        self.decoder = torch.nn.Sequential(torch.nn.ConvTranspose2d(1024, 512, 8, 1, 0),  # 1 -> 8
                                            torch.nn.BatchNorm2d(512),
                                            torch.nn.GELU(),
-                                           torch.nn.ConvTranspose2d(512, 256, 8, 8, 0),
+                                           torch.nn.Upsample(scale_factor=2),
+                                           torch.nn.Conv2d(512, 256, 3, 1, 1, padding_mode='zeros'),  # 8 -> 64
                                            torch.nn.BatchNorm2d(256),
                                            torch.nn.GELU(),
-                                           torch.nn.ConvTranspose2d(256, 32, 2, 2, 0),
+                                           torch.nn.Upsample(scale_factor=2),
+                                           torch.nn.Conv2d(256, 32, 3, 1, 1, padding_mode='zeros'),  # 64 -> 128
                                            torch.nn.BatchNorm2d(32),
                                            torch.nn.GELU(),
-                                           torch.nn.ConvTranspose2d(32, 2, 3, 2, 0)
+                                           torch.nn.Upsample((257, 257)),  # 128 -> 257
+                                           torch.nn.Conv2d(32, 2, 3, 1, 1),
+                                           torch.nn.Tanh()
                                            )
 
     def forward(self,  v, H, A, v_a, v_o):
-        x = self.input_activation(self.input_layer_v(torch.cat((v, v_a, v_o), 1))
+        x_v_o = torch.empty_like(v_a)
+        x_v_o[v_o.to(bool)] = self.v_o_flipped_.to(v_a.device)
+        x_v_o[v_o.to(bool).bitwise_not()] = self.v_o_.to(v_a.device)
+
+        x = self.input_activation(self.input_layer_v(torch.cat((v, v_a, x_v_o), 1))
                                   + self.input_layer_HA(torch.cat((H, A), 1)))
         x1 = self.encoder(x)
         x2 = self.bottleneck(x1)
@@ -160,7 +166,7 @@ class UNet(torch.nn.Module):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
 
-        self.input_layer_v = torch.nn.Conv2d(4, 64, 7, 4, 1)  # 257 -> 64
+        self.input_layer_v = torch.nn.Conv2d(6, 64, 7, 4, 1)  # 257 -> 64
         self.input_layer_HA = torch.nn.Conv2d(2, 64, 6, 4, 1)  # 256 -> 64
         self.input_activation = torch.nn.Sequential(torch.nn.BatchNorm2d(64), torch.nn.GELU())
         self.input_conv = torch.nn.Sequential(
@@ -204,8 +210,15 @@ class UNet(torch.nn.Module):
                                           # SymmetricExponentialUnit())  # ,
                                             # torch.nn.InstanceNorm2d(2, affine=False))  # 257 -> 257
 
+    v_o_ = torch.stack(torch.meshgrid([torch.linspace(0, 1, 257), torch.linspace(0, 1, 257)]))
+    v_o_flipped_ = SeaIceTransform.transform_velocity(torch.clone(v_o_), 0, True)
+
     def forward(self,  v, H, A, v_a, v_o):
-        x = self.input_activation(self.input_layer_v(torch.cat((v, v_a), 1))
+        x_v_o = torch.empty_like(v_a)
+        x_v_o[v_o.to(bool)] = self.v_o_flipped_.to(v_a.device)
+        x_v_o[v_o.to(bool).bitwise_not()] = self.v_o_.to(v_a.device)
+
+        x = self.input_activation(self.input_layer_v(torch.cat((v, v_a, x_v_o), 1))
                                   + self.input_layer_HA(torch.cat((H, A), 1)))
         x1 = self.input_conv(x)
         x2 = self.layer1(x1)
