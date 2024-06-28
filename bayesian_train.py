@@ -1,3 +1,4 @@
+import sys
 import warnings
 
 from data_driven import *
@@ -36,7 +37,7 @@ if __name__ == "__main__":
     if model_name == 0:
         model = UNet().to(dev)
     elif model_name == 1:
-        model = NoisySurrogateNet().to(dev)
+        model = SurrogateNet().to(dev)
     else:
         warnings.warn("Model specifier not 0 or 1. Defaulted to UNet")
         model = UNet().to(dev)
@@ -47,5 +48,5 @@ if __name__ == "__main__":
                                          noise_lvl, True, learning_rate, weight, eps)
 
     with open('register.txt', 'ab') as f:
-        np.savetxt(f, np.array([job_id, min(results['MSE'])])[None], fmt="%d %f")
+        np.savetxt(f, np.array([float(job_id), min(test_results['MSE'])])[None], fmt="%d %f")
     sys.exit(0)
