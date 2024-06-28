@@ -84,7 +84,9 @@ def find_min(model):
 if __name__ == "__main__":
     # Load scores from register
     data_scores = np.atleast_2d(np.loadtxt('register.txt'))  # id, score
+    data_scores = data_scores[data_scores[:, 0].argsort()]
     data_params = np.atleast_2d(np.loadtxt('running.txt'))  # id, x
+    data_params = data_params[data_params[:, 0].argsort()]
 
     if len(data_scores) < 4:
         x_new = np.hstack((np.array([np.random.randint(2), np.random.randint(5)]),
