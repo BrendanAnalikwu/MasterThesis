@@ -95,6 +95,9 @@ class SurrogateNet(torch.nn.Module):
                                            torch.nn.Tanh()
                                            )
 
+    v_o_ = torch.stack(torch.meshgrid([torch.linspace(0, 1, 257), torch.linspace(0, 1, 257)]))
+    v_o_flipped_ = SeaIceTransform.transform_velocity(torch.clone(v_o_), 0, True)
+
     def forward(self,  v, H, A, v_a, v_o):
         x_v_o = torch.empty_like(v_a)
         x_v_o[v_o.to(bool)] = self.v_o_flipped_.to(v_a.device)
