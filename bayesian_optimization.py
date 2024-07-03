@@ -97,14 +97,14 @@ if __name__ == "__main__":
         scores = np.log10(data_scores[:, 1])  # Get scores and convert to log10 base
 
         # Train GP model
-        GP = GaussianProcessRegressor(kernel=kernel(2.), alpha=1e-4 ** 2, optimizer=None, normalize_y=True)
+        GP = GaussianProcessRegressor(kernel=kernel(.3), alpha=2e-3, optimizer=None, normalize_y=True)
         GP.fit(X, scores)
 
         # Fill with fakes
         if len(running_ids) > 0:
             X_running = data_params[np.isin(data_params[:, 0], running_ids), -10:]
             m, s = GP.predict(X_running, return_std=True)
-            fake_scores = (m + .1 * s)
+            fake_scores = m + s
             GP.fit(np.vstack((X, X_running)), np.hstack((scores, fake_scores)))
 
         # Find next parameter set
