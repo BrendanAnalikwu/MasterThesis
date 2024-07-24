@@ -36,8 +36,8 @@ def train(model, dataset, dev, n_steps=128, main_loss='MSE', job_id=None, betas=
     dataloader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True, drop_last=len(train_dataset) > batch_size)
     test_dataloader = DataLoader(test_dataset, batch_size=64, shuffle=False, drop_last=len(test_dataset) > 64)
 
-    criterion = Loss(main_loss, mre_eps=eps, weight=weight).to(dev)
-    test_criterion = Loss(main_loss, mre_eps=eps, weight=weight).to(dev)
+    criterion = Loss(dataset.scalings, main_loss, mre_eps=eps, weight=weight).to(dev)
+    test_criterion = Loss(dataset.scalings, main_loss, mre_eps=eps, weight=weight).to(dev)
     optim = torch.optim.Adam(getParameters(model, learning_rate), lr=learning_rate, betas=betas)
     # scheduler = MultiStepLR(optim, milestones=[20], gamma=.1)
     last_lr = optim.param_groups[0]['lr']
