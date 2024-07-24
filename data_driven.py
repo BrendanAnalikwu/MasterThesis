@@ -124,7 +124,8 @@ def train(model, dataset, dev, n_steps=128, main_loss='MSE', job_id=None, betas=
         pbar.set_postfix(loss=np.mean(criterion.results[main_loss][-len(dataloader):]),
                          test_loss=test_criterion.results[main_loss][-1],
                          mse=np.mean(criterion.results['MSE'][-len(dataloader):]),
-                         lr=last_lr)
+                         MCE=np.mean(criterion.results['MCE'][-len(dataloader):]),
+                         test_MCE=test_criterion.results['MCE'][-1])
 
     torch.save(model, f'model_{model_id}.pt')
     torch.save(criterion.results, f'losses_{model_id}.li')

@@ -48,5 +48,5 @@ if __name__ == "__main__":
                                          noise_lvl, True, learning_rate, weight, eps)
 
     with open('register.txt', 'ab') as f:
-        np.savetxt(f, np.array([float(job_id), min(test_results['MSE'])])[None], fmt="%d %f")
+        np.savetxt(f, np.array([float(job_id), min(test_results['MCE'])])[None], fmt="%d %f")
     sys.exit(0)
