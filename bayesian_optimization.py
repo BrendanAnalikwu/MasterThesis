@@ -64,20 +64,20 @@ def acquisition(model, ij):
     return func
 
 
-models = ['SurrogateNet', 'UNet']
-loss = ['MSE', 'SRE', 'MSE+SRE', 'MSE+MRE', 'MAE']
+models = ['UNet', 'SurrogateNet']
+loss = ['MAE', 'MSE', 'SRE', 'MSE+SRE', 'MSE+MRE']
 
 
 def find_min(model):
     res = []
-    for i in range(len(models)):
-        for j in range(len(loss)):
-            x0 = np.empty(10)
-            x0[:2] = i, j
-            x0[2:] = np.random.uniform(0, 1, 8) * kernel.scales + kernel.ranges[:, 0]
-            r = minimize(acquisition(model, x0[:2]), x0[2:], 'Nelder-Mead', bounds=list(kernel.ranges))
-            r.x = np.hstack((x0[:2], r.x))
-            res.append(r)
+    # for i in range(len(models)):
+    #     for j in range(len(loss)):
+    x0 = np.empty(10)
+    x0[:2] = 0, 4
+    x0[2:] = np.random.uniform(0, 1, 8) * kernel.scales + kernel.ranges[:, 0]
+    r = minimize(acquisition(model, x0[:2]), x0[2:], 'Nelder-Mead', bounds=list(kernel.ranges))
+    r.x = np.hstack((x0[:2], r.x))
+    res.append(r)
     return res[np.argmin([r.fun for r in res])].x
 
 
@@ -89,7 +89,7 @@ if __name__ == "__main__":
     data_params = data_params[data_params[:, 0].argsort()]
 
     if len(data_scores) < 4:
-        x_new = np.hstack((np.array([np.random.randint(2), np.random.randint(5)]),
+        x_new = np.hstack((np.array([0, 4]),
                            np.random.uniform(0, 1, 8) * kernel.scales + kernel.ranges[:, 0]))
     else:
         running_ids = np.setdiff1d(data_params[:, 0], data_scores[:, 0])
@@ -97,7 +97,7 @@ if __name__ == "__main__":
         scores = np.log10(data_scores[:, 1])  # Get scores and convert to log10 base
 
         # Train GP model
-        GP = GaussianProcessRegressor(kernel=kernel(.3), alpha=2e-3, optimizer=None, normalize_y=True)
+        GP = GaussianProcessRegressor(kernel=kernel(1.), alpha=2e-3, optimizer=None, normalize_y=True)
         GP.fit(X, scores)
 
         # Fill with fakes
