@@ -302,6 +302,8 @@ class FourierData(SeaIceDataset):
             self.v_a_scaling = MinMaxNorm(self.v_a)
             self.H_scaling = MinMaxNorm(self.H, velocity=False)
             self.A_scaling = MinMaxNorm(self.A, velocity=False)
+        self.scalings = {'data': self.data_scaling, 'label': self.label_scaling,
+                         'H': self.H_scaling, 'A': self.A_scaling, 'v_a': self.v_a_scaling}
 
         # Perform scaling
         self.data = self.data_scaling(self.data)

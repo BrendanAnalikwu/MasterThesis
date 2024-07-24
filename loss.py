@@ -6,6 +6,8 @@ import numpy as np
 import torch
 import torch.utils.data
 
+from dataset import BaseNorm
+
 
 def advect(v: torch.Tensor, H_old: torch.tensor, dt: float, dx: float, lb: float = 0., ub: float = None):
     """
@@ -423,9 +425,11 @@ def mean_relative_loss(dv: torch.Tensor, label: torch.Tensor, v: Optional[torch.
 class Loss(torch.nn.Module):
     loss_names = ['MAE', 'MSE', 'SRE', 'MSE+SRE', 'MSE+MRE', 'MSE+MRDE', 'MSE+SRE+MRDE']
 
-    def __init__(self, main_loss: str = 'MSE', mre_eps: float = 1e-2, mrde_eps: float = 1e-2, weight=.1, *args, **kwargs):
+    def __init__(self, scalings: dict, main_loss: str = 'MSE',
+                 mre_eps: float = 1e-2, mrde_eps: float = 1e-2, weight=.1, *args, **kwargs):
         super().__init__(*args, **kwargs)
         assert main_loss in self.loss_names
+        self.scalings = scalings
         self.main = main_loss
         self.results = defaultdict(list)
         self.mre_eps = mre_eps
@@ -440,7 +444,7 @@ class Loss(torch.nn.Module):
         with torch.set_grad_enabled('MSE' in self.main and grad):
             mse = torch.nn.functional.mse_loss(dv, label)
         with torch.set_grad_enabled('SRE' in self.main and grad):
-            sre = strain_rate_loss(dv, label)
+            sre = strain_rate_loss(self.scalings['label'].inverse(dv), self.scalings['label'].inverse(label))
             msesre = mse + self.weight * sre
         with torch.set_grad_enabled('MRE' in self.main and grad):
             mre = mean_relative_loss(dv, label, v_old, eps=self.mre_eps)
@@ -451,7 +455,8 @@ class Loss(torch.nn.Module):
             msesremrde = mse + sre + mrde
 
         with torch.no_grad():
-            mce = mean_concentration_loss(dv, label, v_old, A)  # TODO: fix scaling
+            mce = mean_concentration_loss(self.scalings['label'].inverse(dv), self.scalings['label'].inverse(label),
+                                          self.scalings['data'].inverse(v_old), self.scalings['A'].inverse(A))
 
         self.stack.append({'MAE': mae.item(), 'MSE': mse.item(), 'SRE': sre.item(),
                            'MSE+SRE': msesre.item(), 'MSE+MRE': msemre.item(), 'MSE+MRDE': msemrde.item(),
@@ -488,10 +493,11 @@ class Loss(torch.nn.Module):
         with torch.no_grad():
             mae = torch.nn.functional.l1_loss(dv, label)
             mse = torch.nn.functional.mse_loss(dv, label)
-            sre = strain_rate_loss(dv, label)
+            sre = strain_rate_loss(self.scalings['label'].inverse(dv), self.scalings['label'].inverse(label))
             mre = mean_relative_loss(dv, label, v_old, eps=self.mre_eps)
             mrde = mean_relative_loss(dv, label, eps=self.mrde_eps)
-            mce = mean_concentration_loss(dv, label, v_old, A)
+            mce = mean_concentration_loss(self.scalings['label'].inverse(dv), self.scalings['label'].inverse(label),
+                                          self.scalings['data'].inverse(v_old), self.scalings['A'].inverse(A))
 
             msesre = mse + sre
             msemre = mse + mre
