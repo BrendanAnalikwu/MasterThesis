@@ -13,6 +13,7 @@ from torchvision.utils import make_grid
 
 from dataset import transform_data, BenchData, SeaIceDataset, SeaIceTransform, FourierData
 from generate_data import read_vtk2
+from loss import advect
 
 
 def plot_comparison(model: torch.nn.Module, dataset: BenchData, i: int = 0, channel: int = 0, normed: bool = False):
@@ -134,7 +135,7 @@ def get_test_indices(names: str, exp: str, i: int = 0):
     return [np.where(n == np.array(names))[0][0]for n in np.intersect1d(names, test_names)]
 
 
-def plot_output(exp: str, i: int = 0, img: int = 0, linthresh=1e-2):
+def plot_output(exp: str, i: int = 0, img: int = 0, dataset=None, linthresh=1e-2):
     model = load_model(exp, i)
     output = model(*dataset[::20][:-1]).detach()[img, 0]
     label = dataset.label[::20][img, 0]
@@ -166,6 +167,30 @@ def require_gradient(dataset: SeaIceDataset):
 def compute_sensitivity(model: torch.nn.Module, im: int):
     output = model(*dataset[slice(im, im + 1)][:-2])
     gg = sum([torch.autograd.grad(output[0, 0, i, j], dataset.data, retain_graph=True)[0][im].abs().sum(dim=0) for i in range(257) for j in range(257)])
+
+
+def propagate(model, dataset: FourierData, v0, H0, A0, v_a, v_o):
+    assert len(v_a) == len(v_o)
+    n_steps = len(v_a)
+    model.eval()
+    v = torch.empty((n_steps + 1, 2, *v0.shape[-2:]))
+    v[0] = dataset.data_scaling.inverse(v0)
+    H = torch.empty((n_steps + 1, 1, *H0.shape[-2:]))
+    H[0] = dataset.H_scaling.inverse(H0)
+    A = torch.empty((n_steps + 1, 1, *H0.shape[-2:]))
+    A[0] = dataset.A_scaling.inverse(A0)
+
+    for i in range(n_steps):
+        out = model(dataset.data_scaling(v[i, None]),
+                    dataset.H_scaling(H[i, None]),
+                    dataset.A_scaling(A[i, None]),
+                    dataset.v_a_scaling(v_a[i, None]),
+                    v_o[i, None])
+        v[i + 1] = v[i] + dataset.label_scaling.inverse(out.detach()[0])
+        H[i + 1] = advect(v[i + 1, None], H[i, None], 2., .5 / 256, lb=0.)
+        A[i + 1] = advect(v[i + 1, None], A[i, None], 2., .5 / 256, lb=0., ub=1.)
+
+    return v, H, A
 
 
 if __name__ == "__main__":

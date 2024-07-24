@@ -7,7 +7,7 @@ import torch
 import torch.utils.data
 
 
-def advect(v: torch.Tensor, H_old: torch.tensor, dt: float, dx: float):
+def advect(v: torch.Tensor, H_old: torch.tensor, dt: float, dx: float, lb: float = 0., ub: float = None):
     """
     Perform advection step on B-grid.
 
@@ -21,6 +21,10 @@ def advect(v: torch.Tensor, H_old: torch.tensor, dt: float, dx: float):
         Time step
     dx : float
         Grid spacing
+    ub : float
+        Optional upper bound. Default None
+    lb : float
+        Optional lower bound. Default None
 
     Returns
     -------
@@ -46,7 +50,10 @@ def advect(v: torch.Tensor, H_old: torch.tensor, dt: float, dx: float):
     dH[..., :, :-1] += torch.nn.functional.relu(-1 * v_y) * H_old[..., :, 1:] * dt / dx
     dH[..., :, 1:] -= torch.nn.functional.relu(-1 * v_y) * H_old[..., :, 1:] * dt / dx
 
-    return H_old + dH
+    if lb is None and ub is None:
+        return H_old + dH
+    else:
+        return (H_old + dH).clamp(lb, ub)
 
 
 def delta(vx_x: torch.Tensor, vx_y: torch.Tensor, vy_x: torch.Tensor, vy_y: torch.Tensor, e_2: float = .25,
@@ -396,8 +403,8 @@ def strain_rate_loss(v: torch.tensor, label: torch.tensor):
 
 
 def mean_concentration_loss(dv: torch.Tensor, label: torch.Tensor, v_old: torch.Tensor, A: torch.tensor):
-    return (advect((dv + v_old) * 1e-4, A, 2., .5 / 256)
-            - advect((label + v_old) * 1e-4, A, 2., .5 / 256)).square().mean()
+    return (advect(dv + v_old, A, 2., .5 / 256, lb=0., ub=1.)
+            - advect(label + v_old, A, 2., .5 / 256, lb=0., ub=1.)).square().mean()
 
 
 def weighted_mse_loss(input, target):
@@ -444,7 +451,7 @@ class Loss(torch.nn.Module):
             msesremrde = mse + sre + mrde
 
         with torch.no_grad():
-            mce = mean_concentration_loss(dv, label, v_old, A)
+            mce = mean_concentration_loss(dv, label, v_old, A)  # TODO: fix scaling
 
         self.stack.append({'MAE': mae.item(), 'MSE': mse.item(), 'SRE': sre.item(),
                            'MSE+SRE': msesre.item(), 'MSE+MRE': msemre.item(), 'MSE+MRDE': msemrde.item(),
