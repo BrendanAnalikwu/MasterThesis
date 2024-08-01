@@ -203,9 +203,9 @@ def stress(v: torch.Tensor, H: torch.Tensor, A: torch.Tensor, dx: float, C: floa
 
     delta_ = torch.sqrt(g[:, None] * x.square() + h[:, None] * y.square() + i[:, None] * x * y + j[:, None] * x
                         + k[:, None] * y + l[:, None] + dmin ** 2)
-    sxx = P[:, None] * ((a[:, None] * x + b[:, None] * y + c[:, None]) / delta_ - 1)
+    sxx = P * ((a[:, None] * x + b[:, None] * y + c[:, None]) / delta_ - 1)
 
-    sxy = P[:, None] * e_2 * (v__[:, :1] * x + v__[:, 1:] * y + v2[:, 1:] - v1[:, 1:] + v3[:, :1] - v1[:, :1]) / delta_
+    sxy = P * e_2 * (v__[:, :1] * x + v__[:, 1:] * y + v2[:, 1:] - v1[:, 1:] + v3[:, :1] - v1[:, :1]) / delta_
 
     filter_dx = torch.empty(1, 4, 2, 2, device=H.device)
     filter_dx[0, :, 0, 0] = y.flatten()
@@ -224,7 +224,7 @@ def stress(v: torch.Tensor, H: torch.Tensor, A: torch.Tensor, dx: float, C: floa
     d = (1 + e_2) * v__[:, 1]
     e = (1 - e_2) * v__[:, 0]
     f = (1 - e_2) * (v2[:, 0] - v1[:, 0]) + (1 + e_2) * (v3[:, 1] - v1[:, 1])
-    syy = P[:, None] * ((d[:, None] * x + e[:, None] * y + f[:, None]) / delta_ - 1)
+    syy = P * ((d[:, None] * x + e[:, None] * y + f[:, None]) / delta_ - 1)
 
     res2 = torch.nn.functional.conv2d(sxy, filter_dx)/4
     res2 += torch.nn.functional.conv2d(syy, filter_dy)/4
@@ -393,7 +393,11 @@ def strain_rate(v: torch.tensor):
     if v.dim() == 3:
         v = v[None]
     e_x, e_y = finite_differences(v, 1.)
-    return e_x[:, 0], e_y[:, 1], e_x[:, 1] + e_y[:, 0]
+    return e_x[:, 0], e_y[:, 1], .5 * (e_x[:, 1] + e_y[:, 0])
+
+
+def shear(e: torch.Tensor):
+    return torch.sqrt((e[0] - e[1]).square() + 4 * e[2].square())
 
 
 def strain_rate_loss(v: torch.tensor, label: torch.tensor):
