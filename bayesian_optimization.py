@@ -66,6 +66,7 @@ def acquisition(model, ij):
 
 models = ['UNet', 'SurrogateNet']
 loss = ['MAE', 'MSE', 'SRE', 'MSE+SRE', 'MSE+MRE']
+param_names = ['model', 'loss', 'beta1', 'beta2', 'batch_size', 'alpha', 'noise_lvl', 'lr', 'weight', 'eps']
 
 
 def find_min(model):

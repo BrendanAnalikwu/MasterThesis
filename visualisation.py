@@ -11,6 +11,7 @@ import numpy as np
 from matplotlib.colors import SymLogNorm, Normalize
 from torchvision.utils import make_grid
 
+from bayesian_optimization import param_names
 from dataset import transform_data, BenchData, SeaIceDataset, SeaIceTransform, FourierData
 from generate_data import read_vtk2
 from loss import advect
@@ -193,6 +194,32 @@ def propagate(model, dataset: FourierData, v0, H0, A0, v_a, v_o):
     return v, H, A
 
 
+def im_to_disc(x):
+    with open('guess.vec', 'w') as f:
+        f.write("66049 2")
+        # Get order
+        # Sort order
+        # Reorder our field
+        # Write items
+
+        f.write('BackUpEnd')
+
+
+def bo_scatter():
+    data_scores = np.atleast_2d(np.loadtxt('register.txt'))  # id, score
+    data_scores = data_scores[data_scores[:, 0].argsort()]
+    data_params = np.atleast_2d(np.loadtxt('running.txt'))  # id, x
+    data_params = data_params[data_params[:, 0].argsort()]
+    params = data_params[np.isin(data_params[:, 0], data_scores[:, 0]), -10:]
+    scores = data_scores[:, 1]
+
+    plt.figure()
+    for i in range(8):
+        plt.subplot(2, 4, i + 1)
+        plt.scatter(params[:, i + 2], scores)
+        plt.title(param_names[i + 2])
+
+
 if __name__ == "__main__":
     dev = torch.device('cpu')
     dataset = FourierData("C:/Users/Brend/PycharmProjects/MasterThesis/data/test", dev=dev, phys_i=10,
@@ -201,6 +228,12 @@ if __name__ == "__main__":
                                    'v_a': (0., torch.tensor([[[[0.018403656780719757]], [[0.018403703346848488]]]])),
                                    'H': (0., torch.tensor([[[[1.0179400444030762]]]])),
                                    'A': (0., torch.tensor([[[[1.]]]]))})
+    bench = FourierData("C:/Users/Brend/PycharmProjects/MasterThesis/data/bench", dev=dev, phys_i=10,
+                        scaling={'data': (0., torch.tensor([[[[0.0004184620047453791]], [[0.0003502570034470409]]]])),
+                                 'label': (0., torch.tensor([[[[0.0001648720062803477]], [[0.00017528010357636958]]]])),
+                                 'v_a': (0., torch.tensor([[[[0.018403656780719757]], [[0.018403703346848488]]]])),
+                                 'H': (0., torch.tensor([[[[1.0179400444030762]]]])),
+                                 'A': (0., torch.tensor([[[[1.]]]]))})
     # benchmark = BenchData("C:/Users/Brend/Thesis/GAS/seaice/benchmark/Results8/", list(range(1, 97)), dev)
 
     print('done')
