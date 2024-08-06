@@ -85,7 +85,7 @@ def plot_experiments_loss(experiments: List[str], loss_type: str = 'classic', la
         plt.scatter([i] * len(res[exp]), res[exp], c='k')
 
 
-def load_model(exp: str, i: int, dev='cpu'):
+def load_model(exp: str, i: int = None, dev='cpu'):
     if exp[-3:] == '.pt':
         return torch.load('experiments/' + exp).to(dev).eval()
     else:
