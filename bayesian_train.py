@@ -1,7 +1,14 @@
 import sys
 import warnings
+from typing import Union
 
 from data_driven import *
+
+
+def save_result(job_id: int, value: Union[float, str, int], filename: str = 'register.txt'):
+    with open(filename, 'ab') as f:
+        np.savetxt(f, np.array([float(job_id), value])[None], fmt="%d %e")
+
 
 if __name__ == "__main__":
     import argparse
@@ -47,6 +54,5 @@ if __name__ == "__main__":
     model, results, test_results = train(model, dataset, dev, 10000, main_loss, job_id, betas, batch_size, alpha,
                                          noise_lvl, True, learning_rate, weight, eps)
 
-    with open('register.txt', 'ab') as f:
-        np.savetxt(f, np.array([float(job_id), min(test_results['MCE'])])[None], fmt="%d %e")
+    save_result(job_id, min(test_results['SL']))
     sys.exit(0)
