@@ -321,14 +321,18 @@ class FourierData(SeaIceDataset):
         idx = torch.randperm(len(self.t))
         test_idx = idx[:split_idx]
         train_idx = idx[split_idx:]
-        m = 0
-        indices: list[list[int]] = [list(range(m, m := (m+len(tx[1:])))) for tx in self.t]
-        test_indices = [i for idx in test_idx for i in indices[idx]]
-        train_indices = [i for idx in train_idx for i in indices[idx]]
+        test_subset = self.get_subset(test_idx)
+        train_subset = self.get_subset(train_idx)
         if output:
             with open(f"test_data_{output}.txt", "w") as f:
                 f.write('\n'.join(np.sort([str(self.names[i]) for i in test_idx])))
-        return torch.utils.data.Subset(self, test_indices), torch.utils.data.Subset(self, train_indices)
+        return test_subset, train_subset
+
+    def get_subset(self, test_idx):
+        m = 0
+        indices: list[list[int]] = [list(range(m, m := (m + len(tx[1:])))) for tx in self.t]
+        test_indices = [i for idx in test_idx for i in indices[idx]]
+        return torch.utils.data.Subset(self, test_indices)
 
     @staticmethod
     def cyclone(coef: dict, x: torch.Tensor, y: torch.Tensor, t: list[float]):
