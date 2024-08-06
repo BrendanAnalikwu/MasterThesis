@@ -396,8 +396,12 @@ def strain_rate(v: torch.tensor):
     return e_x[:, 0], e_y[:, 1], .5 * (e_x[:, 1] + e_y[:, 0])
 
 
-def shear(e: torch.Tensor):
+def shear(e: Tuple[torch.Tensor, torch.Tensor, torch.Tensor]):
     return torch.sqrt((e[0] - e[1]).square() + 4 * e[2].square())
+
+
+def shear_l1_loss(input: torch.Tensor, target: torch.Tensor, reduction: str = 'none'):
+    return torch.nn.functional.l1_loss(shear(strain_rate(input)), shear(strain_rate(target)), reduction=reduction)
 
 
 def strain_rate_loss(v: torch.tensor, label: torch.tensor):
@@ -461,12 +465,14 @@ class Loss(torch.nn.Module):
         with torch.no_grad():
             mce = mean_concentration_loss(self.scalings['label'].inverse(dv), self.scalings['label'].inverse(label),
                                           self.scalings['data'].inverse(v_old), self.scalings['A'].inverse(A))
+            shear_loss = shear_l1_loss(self.scalings['label'].inverse(dv) + self.scalings['data'].inverse(v_old),
+                                       self.scalings['label'].inverse(label) + self.scalings['data'].inverse(v_old))
 
         self.stack.append({'MAE': mae.item(), 'MSE': mse.item(), 'SRE': sre.item(),
                            'MSE+SRE': msesre.item(), 'MSE+MRE': msemre.item(), 'MSE+MRDE': msemrde.item(),
                            'MSE+SRE+MRDE': msesremrde.item(),
                            'MRE': mre.item(), 'MRDE': mrde.item(),
-                           'MCE': mce.item()})
+                           'MCE': mce.item(), 'SL': shear_loss.item()})
 
         if store:
             self.flush_stack_to_results()
@@ -502,10 +508,12 @@ class Loss(torch.nn.Module):
             mrde = mean_relative_loss(dv, label, eps=self.mrde_eps)
             mce = mean_concentration_loss(self.scalings['label'].inverse(dv), self.scalings['label'].inverse(label),
                                           self.scalings['data'].inverse(v_old), self.scalings['A'].inverse(A))
+            shear_loss = shear_l1_loss(self.scalings['label'].inverse(dv) + self.scalings['data'].inverse(v_old),
+                                       self.scalings['label'].inverse(label) + self.scalings['data'].inverse(v_old))
 
             msesre = mse + sre
             msemre = mse + mre
             msemrde = mse + .01 * mrde
             msesremrde = mse + sre + .01 * mrde
         return {'MAE': mae, 'MSE': mse, 'SRE': sre, 'MSE+SRE': msesre, 'MSE+MRE': msemre, 'MSE+MRDE': msemrde,
-                'MSE+SRE+MRDE': msemrde, 'MRE': mre, 'MRDE': mrde, 'MCE': mce}
+                'MSE+SRE+MRDE': msemrde, 'MRE': mre, 'MRDE': mrde, 'MCE': mce, 'SL': shear_loss}
