@@ -400,7 +400,7 @@ def shear(e: Tuple[torch.Tensor, torch.Tensor, torch.Tensor]):
     return torch.sqrt((e[0] - e[1]).square() + 4 * e[2].square())
 
 
-def shear_l1_loss(input: torch.Tensor, target: torch.Tensor, reduction: str = 'none'):
+def shear_l1_loss(input: torch.Tensor, target: torch.Tensor, reduction: str = 'mean'):
     return torch.nn.functional.l1_loss(shear(strain_rate(input)), shear(strain_rate(target)), reduction=reduction)
 
 
