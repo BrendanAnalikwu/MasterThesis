@@ -82,11 +82,11 @@ class SurrogateNet(torch.nn.Module):
         self.decoder = torch.nn.Sequential(torch.nn.ConvTranspose2d(1024, 512, 8, 1, 0),  # 1 -> 8
                                            torch.nn.BatchNorm2d(512),
                                            torch.nn.GELU(),
-                                           torch.nn.Upsample(scale_factor=2),
+                                           torch.nn.Upsample(scale_factor=8, mode='bilinear'),
                                            torch.nn.Conv2d(512, 256, 3, 1, 1, padding_mode='zeros'),  # 8 -> 64
                                            torch.nn.BatchNorm2d(256),
                                            torch.nn.GELU(),
-                                           torch.nn.Upsample(scale_factor=2),
+                                           torch.nn.Upsample(scale_factor=2, mode='bilinear'),
                                            torch.nn.Conv2d(256, 32, 3, 1, 1, padding_mode='zeros'),  # 64 -> 128
                                            torch.nn.BatchNorm2d(32),
                                            torch.nn.GELU(),
