@@ -63,15 +63,15 @@ def acquisition(model):
 
 models = ['UNet', 'SurrogateNet']
 loss = ['MAE', 'MSE', 'SRE', 'MSE+SRE', 'MSE+MRE']
-param_names = ['model', 'loss', 'beta1', 'beta2', 'batch_size', 'alpha', 'noise_lvl', 'lr', 'weight', 'eps']
-ranges = np.array([(-3, -.5), (-4, -1.3), (3, 7), (-2, 3), (-3, -.5), (-6, -2), (-4, 1), (-6, -1)])
+param_names = ['alpha', 'noise_lvl', 'lr', 'weight', 'eps']
+ranges = np.array([(-2, 3), (-3, -.5), (-6, -2), (-4, 1), (-6, -1)])
 scales = np.array([b - a for a, b in ranges])
 
 
 def find_min(model):
     res = []
-    for i in range(100):
-        x0 = np.random.uniform(0, 1, 8) * scales + ranges[:, 0]
+    for i in range(4**len(param_names)):
+        x0 = np.random.uniform(0, 1, len(param_names)) * scales + ranges[:, 0]
         r = minimize(acquisition(model), x0, 'Nelder-Mead', bounds=list(ranges))
         res.append(r)
     return res[np.argmin([r.fun for r in res])].x
@@ -79,26 +79,25 @@ def find_min(model):
 
 if __name__ == "__main__":
     # Load scores from register
-    data_scores = np.atleast_2d(np.loadtxt('register.txt'))  # id, score
+    data_scores = np.loadtxt('register.txt').reshape(-1, 2)  # id, score
     data_scores = data_scores[data_scores[:, 0].argsort()]
-    data_params = np.atleast_2d(np.loadtxt('running.txt'))  # id, x
+    data_params = np.loadtxt('running.txt').reshape(-1, len(param_names) + 1)  # id, x
     data_params = data_params[data_params[:, 0].argsort()]
 
-    if len(data_scores) < 4:
-        x_new = np.hstack((np.array([0, 4]),
-                           np.random.uniform(0, 1, 8) * scales + ranges[:, 0]))
+    if len(data_scores) < 16:
+        x_new = np.random.uniform(0, 1, len(param_names)) * scales + ranges[:, 0]
     else:
         running_ids = np.setdiff1d(data_params[:, 0], data_scores[:, 0])
-        X = data_params[np.isin(data_params[:, 0], data_scores[:, 0]), -8:]  # Get parameters
+        X = data_params[np.isin(data_params[:, 0], data_scores[:, 0]), -len(param_names):]  # Get parameters
         scores = np.log10(data_scores[:, 1])  # Get scores and convert to log10 base
 
         # Train GP model
-        GP = GaussianProcessRegressor(kernel=RBF(1., (1e-2, 1e2)), alpha=1e-2, n_restarts_optimizer=16, normalize_y=True)
+        GP = GaussianProcessRegressor(kernel=RBF(1., (1e-2, 1e2)), alpha=1e-2, optimizer=None, normalize_y=True)
         GP.fit(X, scores)
 
         # Fill with fakes
         if len(running_ids) > 0:
-            X_running = data_params[np.isin(data_params[:, 0], running_ids), -8:]
+            X_running = data_params[np.isin(data_params[:, 0], running_ids), -len(param_names):]
             m, s = GP.predict(X_running, return_std=True)
             fake_scores = m + s
             GP.fit(np.vstack((X, X_running)), np.hstack((scores, fake_scores)))
@@ -114,7 +113,7 @@ if __name__ == "__main__":
     else:
         id_new = max(data_params[:, 0]) + 1
 
-    with open('running.txt', 'ab') as f:
-        np.savetxt(f, np.hstack((float(id_new), x_new))[None], fmt="%d %d %d %f %f %f %f %f %f %f %f")
-    sys.stdout.write(' '.join(str(int(x)) for x in x_new[:2]) + ' ' + ' '.join(str(x) for x in x_new[2:]))
+    with open('running.txt', 'a') as f:
+        f.write(("%s" + " %f" * len(x_new) + "\n") % (id_new, *tuple(x_new)))
+    sys.stdout.write(' '.join(str(x) for x in x_new))
     sys.exit(0)
