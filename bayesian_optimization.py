@@ -20,18 +20,15 @@ class kernel(RBF):
     def __init__(self, length_scale=1.0):
         super().__init__(length_scale)
 
-    ranges = np.array([(-3, -.5), (-4, -1.3), (3, 7), (-2, 3), (-3, -.5), (-6, -2), (-4, 1), (-6, -1)])
-    scales = np.array([b - a for a, b in ranges])
-
     @staticmethod
     def distance(u: np.array, v: np.array):
-        res = (((u - v)[2:-2] / kernel.scales[:-2]) ** 2).sum()
+        res = (((u - v)[2:-2] / scales[:-2]) ** 2).sum()
         res += ((u[:2] != v[:2]) * 4.).sum()
         if u[1] == v[1]:
             if u[1] == 3:  # MSE+SRE
-                res += ((u[-2] - v[-2]) / kernel.scales[-2]) ** 2
+                res += ((u[-2] - v[-2]) / scales[-2]) ** 2
             elif u[1] == 4:  # MSE+MRE
-                res += (((u[-2:] - v[-2:]) / kernel.scales[-2:]) ** 2).sum() / np.sqrt(2)
+                res += (((u[-2:] - v[-2:]) / scales[-2:]) ** 2).sum() / np.sqrt(2)
             # Otherwise no extra distance
         return res
 
@@ -56,9 +53,9 @@ class kernel(RBF):
             return K
 
 
-def acquisition(model, ij):
+def acquisition(model):
     def func(x, *args):
-        mean, std = model.predict(np.atleast_2d(np.hstack((ij, x))), return_std=True)
+        mean, std = model.predict(np.atleast_2d(x), return_std=True)
         return mean - 1.96 * std
 
     return func
@@ -67,18 +64,16 @@ def acquisition(model, ij):
 models = ['UNet', 'SurrogateNet']
 loss = ['MAE', 'MSE', 'SRE', 'MSE+SRE', 'MSE+MRE']
 param_names = ['model', 'loss', 'beta1', 'beta2', 'batch_size', 'alpha', 'noise_lvl', 'lr', 'weight', 'eps']
+ranges = np.array([(-3, -.5), (-4, -1.3), (3, 7), (-2, 3), (-3, -.5), (-6, -2), (-4, 1), (-6, -1)])
+scales = np.array([b - a for a, b in ranges])
 
 
 def find_min(model):
     res = []
-    # for i in range(len(models)):
-    #     for j in range(len(loss)):
-    x0 = np.empty(10)
-    x0[:2] = 0, 4
-    x0[2:] = np.random.uniform(0, 1, 8) * kernel.scales + kernel.ranges[:, 0]
-    r = minimize(acquisition(model, x0[:2]), x0[2:], 'Nelder-Mead', bounds=list(kernel.ranges))
-    r.x = np.hstack((x0[:2], r.x))
-    res.append(r)
+    for i in range(100):
+        x0 = np.random.uniform(0, 1, 8) * scales + ranges[:, 0]
+        r = minimize(acquisition(model), x0, 'Nelder-Mead', bounds=list(ranges))
+        res.append(r)
     return res[np.argmin([r.fun for r in res])].x
 
 
@@ -91,19 +86,19 @@ if __name__ == "__main__":
 
     if len(data_scores) < 4:
         x_new = np.hstack((np.array([0, 4]),
-                           np.random.uniform(0, 1, 8) * kernel.scales + kernel.ranges[:, 0]))
+                           np.random.uniform(0, 1, 8) * scales + ranges[:, 0]))
     else:
         running_ids = np.setdiff1d(data_params[:, 0], data_scores[:, 0])
-        X = data_params[np.isin(data_params[:, 0], data_scores[:, 0]), -10:]  # Get parameters
+        X = data_params[np.isin(data_params[:, 0], data_scores[:, 0]), -8:]  # Get parameters
         scores = np.log10(data_scores[:, 1])  # Get scores and convert to log10 base
 
         # Train GP model
-        GP = GaussianProcessRegressor(kernel=kernel(1.), alpha=2e-3, optimizer=None, normalize_y=True)
+        GP = GaussianProcessRegressor(kernel=RBF(1., (1e-2, 1e2)), alpha=1e-2, n_restarts_optimizer=16, normalize_y=True)
         GP.fit(X, scores)
 
         # Fill with fakes
         if len(running_ids) > 0:
-            X_running = data_params[np.isin(data_params[:, 0], running_ids), -10:]
+            X_running = data_params[np.isin(data_params[:, 0], running_ids), -8:]
             m, s = GP.predict(X_running, return_std=True)
             fake_scores = m + s
             GP.fit(np.vstack((X, X_running)), np.hstack((scores, fake_scores)))
