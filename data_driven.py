@@ -1,4 +1,5 @@
 import copy
+import signal
 
 import numpy as np
 import torch
@@ -45,6 +46,16 @@ def train(model, dataset, dev, n_steps=128, main_loss='MSE', job_id=None, betas=
     best_epoch = 0
     best_model = None
     num_bad_epochs = 0
+
+    terminated = False
+
+    def termination_handler(signum, frame):
+        print("Termination signal received")
+        nonlocal terminated
+        terminated = True
+
+    # Note: include '#SBATCH --signal=SIGTERM@300' in SLURM script
+    signal.signal(signal.SIGTERM, termination_handler)
 
     model_id = f"{model.__class__.__name__}_{main_loss}_{alpha}_{noise_lvl}"
     if job_id:
@@ -106,7 +117,7 @@ def train(model, dataset, dev, n_steps=128, main_loss='MSE', job_id=None, betas=
             num_bad_epochs = 0
         else:
             num_bad_epochs += 1
-            if num_bad_epochs >= patience and test_criterion.results[main_loss][-1] > np.mean(criterion.results[main_loss][-len(dataloader):]):
+            if num_bad_epochs >= patience and test_criterion.results[main_loss][-1] > np.mean(criterion.results[main_loss][-len(dataloader):]) and len(test_criterion.results[main_loss]) > 300:
                 print('EARLY STOPPING CRITERION MET')
                 print(f'Best epoch: {best_epoch}')
                 print(f'Best test loss: {best_loss}')
@@ -115,6 +126,14 @@ def train(model, dataset, dev, n_steps=128, main_loss='MSE', job_id=None, betas=
                 break
 
         model.train()
+
+        if terminated:
+            print(f'Stopped with {num_bad_epochs} bad epochs')
+            print(f'Best epoch: {best_epoch}')
+            print(f'Best test loss: {best_loss}')
+            torch.save(model, f'overfit_model_{model_id}.pt')
+            model.load_state_dict(best_model)
+            break
 
         if i % 5 == 0 and save:
             torch.save(model, f'model_{model_id}.pt')
@@ -130,6 +149,7 @@ def train(model, dataset, dev, n_steps=128, main_loss='MSE', job_id=None, betas=
     torch.save(model, f'model_{model_id}.pt')
     torch.save(criterion.results, f'losses_{model_id}.li')
     torch.save(test_criterion.results, f'test_losses_{model_id}.li')
+    print("Cleanly terminated the program")
 
     return model, criterion.results, test_criterion.results
 
