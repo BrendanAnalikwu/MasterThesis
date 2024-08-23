@@ -7,6 +7,8 @@ from scipy.spatial.distance import pdist, squareform, cdist
 from sklearn.gaussian_process import GaussianProcessRegressor
 from sklearn.gaussian_process.kernels import RBF, _check_length_scale, Kernel
 
+import matplotlib.pyplot as plt
+
 
 def get_scores():
     pass
@@ -82,24 +84,23 @@ if __name__ == "__main__":
     data_scores = np.loadtxt('register.txt').reshape(-1, 2)  # id, score
     data_scores = data_scores[data_scores[:, 0].argsort()]
     data_params = np.loadtxt('running.txt').reshape(-1, len(param_names) + 1)  # id, x
-    data_params = data_params[data_params[:, 0].argsort()]
 
     if len(data_scores) < 16:
         x_new = np.random.uniform(0, 1, len(param_names)) * scales + ranges[:, 0]
     else:
+        data_params = data_params[data_params[:, 0].argsort()]
         running_ids = np.setdiff1d(data_params[:, 0], data_scores[:, 0])
         X = data_params[np.isin(data_params[:, 0], data_scores[:, 0]), -len(param_names):]  # Get parameters
         scores = np.log10(data_scores[:, 1])  # Get scores and convert to log10 base
 
         # Train GP model
-        GP = GaussianProcessRegressor(kernel=RBF(1., (1e-2, 1e2)), alpha=1e-2, optimizer=None, normalize_y=True)
+        GP = GaussianProcessRegressor(kernel=RBF(1., (1e-2, 1e2)), alpha=1e-2, normalize_y=True)
         GP.fit(X, scores)
 
         # Fill with fakes
         if len(running_ids) > 0:
             X_running = data_params[np.isin(data_params[:, 0], running_ids), -len(param_names):]
-            m, s = GP.predict(X_running, return_std=True)
-            fake_scores = m + s
+            fake_scores = GP.predict(X_running)
             GP.fit(np.vstack((X, X_running)), np.hstack((scores, fake_scores)))
 
         # Find next parameter set
