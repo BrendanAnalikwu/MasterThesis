@@ -3,6 +3,7 @@ import signal
 
 import numpy as np
 import torch
+from torch.optim.lr_scheduler import StepLR
 from torch.utils.data import DataLoader
 from tqdm import trange
 
@@ -39,9 +40,8 @@ def train(model, dataset, dev, n_steps=128, main_loss='MSE', job_id=None, betas=
 
     criterion = Loss(dataset.scalings, main_loss, mre_eps=eps, weight=weight).to(dev)
     test_criterion = Loss(dataset.scalings, main_loss, mre_eps=eps, weight=weight).to(dev)
-    optim = torch.optim.Adam(getParameters(model, learning_rate), lr=learning_rate, betas=betas)
-    # scheduler = MultiStepLR(optim, milestones=[20], gamma=.1)
-    last_lr = optim.param_groups[0]['lr']
+    optim = torch.optim.Adam(model.parameters(), lr=learning_rate, betas=betas)
+    scheduler = StepLR(optim, step_size=1, gamma=.5)
     best_loss = 1e6
     best_epoch = 0
     best_model = None
@@ -96,12 +96,6 @@ def train(model, dataset, dev, n_steps=128, main_loss='MSE', job_id=None, betas=
             optim.step()
             torch.cuda.empty_cache()
 
-        # scheduler.step()
-        if optim.param_groups[0]['lr'] != last_lr:
-            last_lr = optim.param_groups[0]['lr']
-            print(f"NEW LEARNING RATE: {last_lr}")
-            pbar.update()
-
         # params.append([p.abs().mean().cpu().detach() for p in model.parameters() if p.dim() > 3])
         model.eval()
         with torch.no_grad():
@@ -124,6 +118,9 @@ def train(model, dataset, dev, n_steps=128, main_loss='MSE', job_id=None, betas=
                 torch.save(model, f'overfit_model_{model_id}.pt')
                 model.load_state_dict(best_model)
                 break
+            elif num_bad_epochs % 50 == 0:
+                scheduler.step()
+                print(f'REDUCED LEARNING RATE TO {scheduler.get_last_lr()[0]} at i={i}')
 
         model.train()
 
