@@ -106,8 +106,8 @@ def finite_differences(v: torch.Tensor, dx: float) -> Tuple[torch.Tensor, torch.
     Tuple[torch.Tensor, torch.Tensor]
         Tuple of tensors with finite differences with shape (N, 2, H, W)
     """
-    v_x = (v[:, :, :-1, 1:] + v[:, :, 1:, 1:] - v[:, :, :-1, :-1] - v[:, :, 1:, :-1]) / dx / 2.
-    v_y = (v[:, :, 1:, :-1] + v[:, :, 1:, 1:] - v[:, :, :-1, :-1] - v[:, :, :-1, 1:]) / dx / 2.
+    v_y = (v[:, :, :-1, 1:] + v[:, :, 1:, 1:] - v[:, :, :-1, :-1] - v[:, :, 1:, :-1]) / dx / 2.
+    v_x = (v[:, :, 1:, :-1] + v[:, :, 1:, 1:] - v[:, :, :-1, :-1] - v[:, :, :-1, 1:]) / dx / 2.
 
     return v_x, v_y
 
