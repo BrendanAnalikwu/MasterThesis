@@ -27,16 +27,16 @@ if __name__ == '__main__':
     ids = np.atleast_2d(np.loadtxt(os.path.join(directory, 'register.txt')))[:, 0]
 
     dataset = FourierData(data_path, None, dev=dev, phys_i=10, max_size=None)
+    with open(glob(os.path.join(directory, f'test_data_*.txt'))[0], 'r', encoding='latin-1') as file:
+        test_names = file.read().split()
 
     for id in ids:
         try:
             model = torch.load(glob(os.path.join(directory, f'model*{int(id)}.pt'))[0]).to(dev).eval()
-        except EOFError:
+        except (EOFError, IndexError):
             warnings.warn(f"Model {int(id)} could not be loaded")
             continue
         with torch.no_grad():
-            with open(glob(os.path.join(directory, f'test_data_{int(id)}.txt'))[0], 'r', encoding='latin-1') as file:
-                test_names = file.read().split()
             test_split = [np.where(n == np.array(dataset.names))[0][0] for n in
                           np.intersect1d(dataset.names, test_names)]
             data_loader = DataLoader(dataset.get_subset(test_split), batch_size=16, shuffle=False)
