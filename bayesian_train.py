@@ -22,8 +22,8 @@ if __name__ == "__main__":
     parser.add_argument('alpha', help='Regularisation alpha', type=float, default=1.)
     parser.add_argument('noiselvl', type=float, default=0., help='Amount of noise to add to training data')
     parser.add_argument('learning_rate', type=float, default=1e-4, help='Optimiser\'s learning rate')
-    parser.add_argument('weight', type=float, default=1e-4, help='Weight of SRE/MRE loss')
-    parser.add_argument('epsilon', type=float, default=1e-4, help='MRE epsilon')
+    parser.add_argument('-weight', type=float, default=1e-4, help='Weight of SRE/MRE loss')
+    parser.add_argument('-epsilon', type=float, default=1e-6, help='MRE epsilon')
 
     args = parser.parse_args()
 
@@ -54,5 +54,5 @@ if __name__ == "__main__":
     model, results, test_results = train(model, dataset, dev, 10000, main_loss, job_id, betas, batch_size, alpha,
                                          noise_lvl, True, learning_rate, weight, eps)
 
-    save_result(job_id, min(test_results['SL']))
+    save_result(job_id, test_results['SL'][np.argmin(test_results[main_loss])])
     sys.exit(0)
