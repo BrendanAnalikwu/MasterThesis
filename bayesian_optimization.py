@@ -65,8 +65,8 @@ def acquisition(model):
 
 models = ['UNet', 'SurrogateNet']
 loss = ['MAE', 'MSE', 'SRE', 'MSE+SRE', 'MSE+MRE']
-param_names = ['alpha', 'noise_lvl', 'lr', 'weight', 'eps']
-ranges = np.array([(-2, 3), (-3, -.5), (-6, -2), (-4, 1), (-10, -5)])
+param_names = ['alpha', 'noise_lvl', 'lr']
+ranges = np.array([(-3, 2), (-3, -.5), (-4, -1)])
 scales = np.array([b - a for a, b in ranges])
 
 
@@ -85,7 +85,7 @@ if __name__ == "__main__":
     data_scores = data_scores[data_scores[:, 0].argsort()]
     data_params = np.loadtxt('running.txt').reshape(-1, len(param_names) + 1)  # id, x
 
-    if len(data_scores) < 16:
+    if len(data_scores) < 10:
         x_new = np.random.uniform(0, 1, len(param_names)) * scales + ranges[:, 0]
     else:
         data_params = data_params[data_params[:, 0].argsort()]
@@ -94,7 +94,7 @@ if __name__ == "__main__":
         scores = np.log10(data_scores[:, 1])  # Get scores and convert to log10 base
 
         # Train GP model
-        GP = GaussianProcessRegressor(kernel=RBF(1., (1e-2, 1e2)), alpha=1e-2, normalize_y=True)
+        GP = GaussianProcessRegressor(kernel=RBF(1., (1e-2, 1e2)), optimizer=None, alpha=1e-2, normalize_y=True)
         GP.fit(X, scores)
 
         # Fill with fakes
