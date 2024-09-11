@@ -1,0 +1,17 @@
+cff-version: 1.2.0
+title: Deep learning based sea ice dynamics
+message: >-
+  If you use this software, please cite it using the
+  metadata from this file.
+type: software
+authors:
+  - given-names: Brendan
+    family-names: Analikwu
+repository: 'https://github.com/BrendanAnalikwu/MasterThesisGascoigne'
+keywords:
+  - Sea ice dynamics
+  - U-Net
+  - Deep learning
+  - Pytorch
+  - Convolutional neural network
+license: MIT

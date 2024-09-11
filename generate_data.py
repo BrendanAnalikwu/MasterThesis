@@ -165,6 +165,52 @@ def read_vtk(filename: str, point_data: bool = True, variable_name: str = '', in
     return data[:, 2]
 
 
+def read_vtk2(filename: str, point_data: bool = True, indexing: str = 'xy'):
+    raw_xy = []
+    raw_v = []
+    with open(filename) as f:
+        while not f.readline().startswith('POINTS'):
+            pass
+        while not (line := f.readline()).startswith('CELLS'):
+            if line == '\n':
+                continue
+            x, y, _ = line.split()
+            raw_xy.append((x, y))
+
+        if point_data:
+            while not f.readline().startswith('VECTORS'):
+                pass
+        else:
+            coords = np.ndarray((len(raw_xy), 2))
+            coords[:] = raw_xy
+            raw_i = []
+            while not (line := f.readline()).startswith('CELL_TYPES'):
+                if line == '\n':
+                    continue
+                raw_i.append(line.split()[1:])
+            raw_i = np.array(raw_i, int)
+            raw_xy = np.ndarray((len(raw_i), 2))
+            raw_xy[:, 0] = coords[:, 0][raw_i].mean(1)
+            raw_xy[:, 1] = coords[:, 1][raw_i].mean(1)
+            while not f.readline().startswith('VECTORS'):
+                pass
+        while not (line := f.readline()).startswith('\n'):
+            raw_v.append(line.split()[:2])
+    data = np.ndarray((len(raw_xy), 4))
+    data[:, :2] = raw_xy
+    data[:, 2:] = raw_v
+
+    # Reorder data
+    if indexing == 'xy':
+        data = data[data[:, 0].argsort()]
+        data = data[data[:, 1].argsort(kind='mergesort')]
+    else:
+        data = data[data[:, 1].argsort()]
+        data = data[data[:, 0].argsort(kind='mergesort')]
+
+    return data[:, 2:]
+
+
 def generate_data(num_samples=1000, process_id=0) -> Callable[[], np.ndarray]:
     """
     Returns a function that runs a loop generating samples with generate_sample. This pattern is needed for asyncio's

@@ -1,8 +1,61 @@
+from collections import defaultdict
 from math import sqrt
-from typing import Tuple
+from typing import Tuple, Optional
 
+import numpy as np
 import torch
 import torch.utils.data
+
+from dataset import BaseNorm
+
+
+def advect(v: torch.Tensor, H_old: torch.tensor, dt: float, dx: float, lb: float = 0., ub: float = None):
+    """
+    Perform advection step on B-grid.
+
+    Parameters
+    ----------
+    v : torch.Tensor
+        Ice velocity tensor of shape (N, 2, H+1, W+1)
+    H_old : torch.Tensor
+        Quantity to advect as tensor with shape (N, H, W)
+    dt : float
+        Time step
+    dx : float
+        Grid spacing
+    ub : float
+        Optional upper bound. Default None
+    lb : float
+        Optional lower bound. Default None
+
+    Returns
+    -------
+    torch.Tensor
+        Advected quantity
+
+    """
+
+    assert v.dim() == H_old.dim()
+    dH = torch.zeros_like(H_old)
+
+    # x-direction
+    v_x = (v[:, 0:1, 1:-1, 1:] + v[:, 0:1, 1:-1, :-1]) / 2.
+    dH[..., 1:, :] += torch.nn.functional.relu(v_x) * H_old[..., :-1, :] * dt / dx
+    dH[..., :-1, :] -= torch.nn.functional.relu(v_x) * H_old[..., :-1, :] * dt / dx
+    dH[..., :-1, :] += torch.nn.functional.relu(-1 * v_x) * H_old[..., 1:, :] * dt / dx
+    dH[..., 1:, :] -= torch.nn.functional.relu(-1 * v_x) * H_old[..., 1:, :] * dt / dx
+
+    # y-direction
+    v_y = (v[:, 1:, 1:, 1:-1] + v[:, 1:, :-1, 1:-1]) / 2.
+    dH[..., :, 1:] += torch.nn.functional.relu(v_y) * H_old[..., :, :-1] * dt / dx
+    dH[..., :, :-1] -= torch.nn.functional.relu(v_y) * H_old[..., :, :-1] * dt / dx
+    dH[..., :, :-1] += torch.nn.functional.relu(-1 * v_y) * H_old[..., :, 1:] * dt / dx
+    dH[..., :, 1:] -= torch.nn.functional.relu(-1 * v_y) * H_old[..., :, 1:] * dt / dx
+
+    if lb is None and ub is None:
+        return H_old + dH
+    else:
+        return (H_old + dH).clamp(lb, ub)
 
 
 def delta(vx_x: torch.Tensor, vx_y: torch.Tensor, vy_x: torch.Tensor, vy_y: torch.Tensor, e_2: float = .25,
@@ -53,8 +106,8 @@ def finite_differences(v: torch.Tensor, dx: float) -> Tuple[torch.Tensor, torch.
     Tuple[torch.Tensor, torch.Tensor]
         Tuple of tensors with finite differences with shape (N, 2, H, W)
     """
-    v_x = (v[:, :, :-1, 1:] + v[:, :, 1:, 1:] - v[:, :, :-1, :-1] - v[:, :, 1:, :-1]) / dx / 2.
-    v_y = (v[:, :, 1:, :-1] + v[:, :, 1:, 1:] - v[:, :, :-1, :-1] - v[:, :, :-1, 1:]) / dx / 2.
+    v_y = (v[:, :, :-1, 1:] + v[:, :, 1:, 1:] - v[:, :, :-1, :-1] - v[:, :, 1:, :-1]) / dx / 2.
+    v_x = (v[:, :, 1:, :-1] + v[:, :, 1:, 1:] - v[:, :, :-1, :-1] - v[:, :, :-1, 1:]) / dx / 2.
 
     return v_x, v_y
 
@@ -106,13 +159,13 @@ integration_filter = torch.stack((integration_filter, integration_filter))
 def integration_B_grid(vertex: torch.Tensor, cell: torch.Tensor, dx: float):
     filter = integration_filter.to(vertex.device)
 
-    res = torch.mul(torch.nn.functional.conv2d(vertex[:, :, 1:, :-1], filter, groups=2), cell[:, None, 1:, :-1])
+    res = torch.mul(torch.nn.functional.conv2d(vertex[:, :, 1:, :-1], filter, groups=2), cell[:, :, 1:, :-1])
     res += torch.mul(torch.nn.functional.conv2d(vertex[:, :, 1:, 1:], torch.flip(filter, [3]), groups=2),
-                     cell[:, None, 1:, 1:])
+                     cell[:, :, 1:, 1:])
     res += torch.mul(torch.nn.functional.conv2d(vertex[:, :, :-1, :-1], torch.flip(filter, [2]), groups=2),
-                     cell[:, None, :-1, :-1])
+                     cell[:, :, :-1, :-1])
     res += torch.mul(torch.nn.functional.conv2d(vertex[:, :, :-1, 1:], torch.flip(filter, [2, 3]), groups=2),
-                     cell[:, None, :-1, 1:])
+                     cell[:, :, :-1, 1:])
 
     return res * dx ** 2 / 36
 
@@ -150,9 +203,9 @@ def stress(v: torch.Tensor, H: torch.Tensor, A: torch.Tensor, dx: float, C: floa
 
     delta_ = torch.sqrt(g[:, None] * x.square() + h[:, None] * y.square() + i[:, None] * x * y + j[:, None] * x
                         + k[:, None] * y + l[:, None] + dmin ** 2)
-    sxx = P[:, None] * ((a[:, None] * x + b[:, None] * y + c[:, None]) / delta_ - 1)
+    sxx = P * ((a[:, None] * x + b[:, None] * y + c[:, None]) / delta_ - 1)
 
-    sxy = P[:, None] * e_2 * (v__[:, :1] * x + v__[:, 1:] * y + v2[:, 1:] - v1[:, 1:] + v3[:, :1] - v1[:, :1]) / delta_
+    sxy = P * e_2 * (v__[:, :1] * x + v__[:, 1:] * y + v2[:, 1:] - v1[:, 1:] + v3[:, :1] - v1[:, :1]) / delta_
 
     filter_dx = torch.empty(1, 4, 2, 2, device=H.device)
     filter_dx[0, :, 0, 0] = y.flatten()
@@ -171,7 +224,7 @@ def stress(v: torch.Tensor, H: torch.Tensor, A: torch.Tensor, dx: float, C: floa
     d = (1 + e_2) * v__[:, 1]
     e = (1 - e_2) * v__[:, 0]
     f = (1 - e_2) * (v2[:, 0] - v1[:, 0]) + (1 + e_2) * (v3[:, 1] - v1[:, 1])
-    syy = P[:, None] * ((d[:, None] * x + e[:, None] * y + f[:, None]) / delta_ - 1)
+    syy = P * ((d[:, None] * x + e[:, None] * y + f[:, None]) / delta_ - 1)
 
     res2 = torch.nn.functional.conv2d(sxy, filter_dx)/4
     res2 += torch.nn.functional.conv2d(syy, filter_dy)/4
@@ -340,7 +393,15 @@ def strain_rate(v: torch.tensor):
     if v.dim() == 3:
         v = v[None]
     e_x, e_y = finite_differences(v, 1.)
-    return e_x[:, 0], e_y[:, 1], e_x[:, 1] + e_y[:, 0]
+    return e_x[:, 0], e_y[:, 1], .5 * (e_x[:, 1] + e_y[:, 0])
+
+
+def shear(e: Tuple[torch.Tensor, torch.Tensor, torch.Tensor]):
+    return torch.sqrt((e[0] - e[1]).square() + 4 * e[2].square())
+
+
+def shear_l1_loss(input: torch.Tensor, target: torch.Tensor, reduction: str = 'mean'):
+    return torch.nn.functional.l1_loss(shear(strain_rate(input)), shear(strain_rate(target)), reduction=reduction)
 
 
 def strain_rate_loss(v: torch.tensor, label: torch.tensor):
@@ -349,3 +410,110 @@ def strain_rate_loss(v: torch.tensor, label: torch.tensor):
         error = error[None]
     e_x, e_y = finite_differences(error, 1.)
     return (e_x[:, 0].square() + .5 * (e_x[:, 1] + e_y[:, 0]).square() + e_y[:, 1].square()).mean()
+
+
+def mean_concentration_loss(dv: torch.Tensor, label: torch.Tensor, v_old: torch.Tensor, A: torch.tensor):
+    return (advect(dv + v_old, A, 2., .5 / 256, lb=0., ub=1.)
+            - advect(label + v_old, A, 2., .5 / 256, lb=0., ub=1.)).square().mean()
+
+
+def weighted_mse_loss(input, target):
+    return ((input - target).square() / target.square().mean(dim=(1, 2, 3), keepdim=True).sqrt()).mean()
+
+
+def mean_relative_loss(dv: torch.Tensor, label: torch.Tensor, v: Optional[torch.Tensor] = None, eps: float = 1e-4,
+                       reduction='mean'):
+    if v is not None:
+        res = (dv - label).norm(2, -3) / ((label + v).norm(2, -3) + eps)
+    else:
+        res = (dv - label).norm(2, -3) / (label.norm(2, -3) + eps)
+    return res.mean() if reduction == 'mean' else res
+
+
+class Loss(torch.nn.Module):
+    loss_names = ['MAE', 'MSE', 'SRE', 'MSE+SRE', 'MSE+MRE', 'MSE+MRDE', 'MSE+SRE+MRDE']
+
+    def __init__(self, scalings: dict, main_loss: str = 'MSE',
+                 mre_eps: float = 1e-2, mrde_eps: float = 1e-2, weight=.1, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        assert main_loss in self.loss_names
+        self.scalings = scalings
+        self.main = main_loss
+        self.results = defaultdict(list)
+        self.mre_eps = mre_eps
+        self.mrde_eps = mrde_eps
+        self.weight = weight
+        self.stack = []
+
+    def forward(self, dv: torch.Tensor, label: torch.Tensor, v_old: torch.Tensor, A: torch.tensor,
+                store: bool = True, grad: bool = True):
+        with torch.set_grad_enabled('MAE' in self.main and grad):
+            mae = torch.nn.functional.l1_loss(dv, label)
+        with torch.set_grad_enabled('MSE' in self.main and grad):
+            mse = torch.nn.functional.mse_loss(dv, label)
+        with torch.set_grad_enabled('SRE' in self.main and grad):
+            sre = strain_rate_loss(self.scalings['label'].inverse(dv) * 1e4, self.scalings['label'].inverse(label) * 1e4)
+            msesre = mse + self.weight * sre
+        with torch.set_grad_enabled('MRE' in self.main and grad):
+            mre = mean_relative_loss(self.scalings['label'].inverse(dv) * 1e4, self.scalings['label'].inverse(label) * 1e4, self.scalings['data'].inverse(v_old) * 1e4, eps=self.mre_eps * 1e4)
+            msemre = mse + self.weight * mre
+        with torch.set_grad_enabled('MRDE' in self.main and grad):
+            mrde = mean_relative_loss(self.scalings['label'].inverse(dv) * 1e4, self.scalings['label'].inverse(label) * 1e4, eps=self.mrde_eps * 1e4)
+            msemrde = mse + mrde
+            msesremrde = mse + sre + mrde
+
+        with torch.no_grad():
+            mce = mean_concentration_loss(self.scalings['label'].inverse(dv), self.scalings['label'].inverse(label),
+                                          self.scalings['data'].inverse(v_old), self.scalings['A'].inverse(A))
+            shear_loss = shear_l1_loss(self.scalings['label'].inverse(dv) + self.scalings['data'].inverse(v_old),
+                                       self.scalings['label'].inverse(label) + self.scalings['data'].inverse(v_old))
+
+        self.stack.append({'MAE': mae.item(), 'MSE': mse.item(), 'SRE': sre.item(),
+                           'MSE+SRE': msesre.item(), 'MSE+MRE': msemre.item(), 'MSE+MRDE': msemrde.item(),
+                           'MSE+SRE+MRDE': msesremrde.item(),
+                           'MRE': mre.item(), 'MRDE': mrde.item(),
+                           'MCE': mce.item(), 'SL': shear_loss.item()})
+
+        if store:
+            self.flush_stack_to_results()
+
+        if self.main == 'MAE':
+            return mae
+        elif self.main == 'MSE':
+            return mse
+        elif self.main == 'SRE':
+            return sre
+        elif self.main == 'MSE+SRE':
+            return msesre
+        elif self.main == 'MSE+MRE':
+            return msemre
+        elif self.main == 'MSE+MRDE':
+            return msemrde
+        elif self.main == 'MSE+SRE+MRDE':
+            return msesremrde
+        elif self.main == 'MCE':
+            return mce
+
+    def flush_stack_to_results(self):
+        for key in self.stack[0].keys():
+            self.results[key].append(np.mean([d[key] for d in self.stack]))
+        self.stack = []
+
+    def validate(self, dv: torch.Tensor, label: torch.Tensor, v_old: torch.Tensor, A: torch.tensor, store: bool = True):
+        with torch.no_grad():
+            mae = torch.nn.functional.l1_loss(dv, label)
+            mse = torch.nn.functional.mse_loss(dv, label)
+            sre = strain_rate_loss(self.scalings['label'].inverse(dv) * 1e4, self.scalings['label'].inverse(label) * 1e4)
+            mre = mean_relative_loss(self.scalings['label'].inverse(dv), self.scalings['label'].inverse(label), self.scalings['data'].inverse(v_old), eps=self.mre_eps)
+            mrde = mean_relative_loss(self.scalings['label'].inverse(dv), self.scalings['label'].inverse(label), eps=self.mrde_eps)
+            mce = mean_concentration_loss(self.scalings['label'].inverse(dv), self.scalings['label'].inverse(label),
+                                          self.scalings['data'].inverse(v_old), self.scalings['A'].inverse(A))
+            shear_loss = shear_l1_loss(self.scalings['label'].inverse(dv) + self.scalings['data'].inverse(v_old),
+                                       self.scalings['label'].inverse(label) + self.scalings['data'].inverse(v_old))
+
+            msesre = mse + sre
+            msemre = mse + mre
+            msemrde = mse + .01 * mrde
+            msesremrde = mse + sre + .01 * mrde
+        return {'MAE': mae, 'MSE': mse, 'SRE': sre, 'MSE+SRE': msesre, 'MSE+MRE': msemre, 'MSE+MRDE': msemrde,
+                'MSE+SRE+MRDE': msemrde, 'MRE': mre, 'MRDE': mrde, 'MCE': mce, 'SL': shear_loss}
