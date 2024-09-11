@@ -8,13 +8,15 @@ from typing import List, Tuple, Union, Dict
 import matplotlib.pyplot as plt
 import torch.nn
 import numpy as np
-from matplotlib.colors import SymLogNorm, Normalize
+from matplotlib.colors import SymLogNorm, Normalize, LinearSegmentedColormap
 from torchvision.utils import make_grid
 
 from bayesian_optimization import param_names
 from dataset import transform_data, BenchData, SeaIceDataset, SeaIceTransform, FourierData
 from generate_data import read_vtk2
 from loss import advect
+
+cmap_bbw = LinearSegmentedColormap.from_list('bbw', ['black', 'blue', 'white'])
 
 
 def plot_comparison(model: torch.nn.Module, dataset: BenchData, i: int = 0, channel: int = 0, normed: bool = False):
@@ -218,6 +220,39 @@ def bo_scatter():
         plt.subplot(2, 4, i + 1)
         plt.scatter(params[:, i + 2], scores)
         plt.title(param_names[i + 2])
+
+
+def save_concentration(fn: str, im: torch.Tensor, bench=False):
+    fig = plt.figure(frameon=False, figsize=(4, 4))
+    ax = plt.Axes(fig, [0., 0., 1., 1.])
+    ax.set_axis_off()
+    fig.add_axes(ax)
+    ax.imshow(im.T.flip([0, 1]) if bench else im.T, cmap=cmap_bbw, vmax=1, vmin=.75, origin='lower')
+    fig.savefig('plots/' + fn + '.pdf')
+
+
+def save_velocity(fn: str, im: torch.Tensor, vm=None, bench=False):
+    fig = plt.figure(frameon=False, figsize=(4, 4))
+    ax = plt.Axes(fig, [0., 0., 1., 1.])
+    ax.set_axis_off()
+    fig.add_axes(ax)
+    if not vm:
+        vm = im.abs().max()
+    ax.imshow(SeaIceTransform.transform_velocity(im.T, 2, 0) if bench else im.T, cmap='seismic', vmax=vm, vmin=-vm, origin='lower')
+    fig.savefig('plots/' + fn + f'[{vm:.2e}].pdf')
+
+
+def save_shear(fn: str, im: torch.Tensor, vmin: float = None, vmax: float = None, bench=False):
+    fig = plt.figure(frameon=False, figsize=(4, 4))
+    ax = plt.Axes(fig, [0., 0., 1., 1.])
+    ax.set_axis_off()
+    fig.add_axes(ax)
+    if not vmin:
+        vmin = im.min()
+    if not vmax:
+        vmax = im.max()
+    ax.imshow(im.T.flip([0, 1]) if bench else im.T, cmap='jet', origin='lower', vmin=vmin, vmax=vmax)
+    fig.savefig('plots/' + fn + f'[{vmin:.2e}, {vmax:.2e}].pdf')
 
 
 if __name__ == "__main__":
