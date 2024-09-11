@@ -118,3 +118,15 @@ if __name__ == "__main__":
         f.write(("%s" + " %f" * len(x_new) + "\n") % (id_new, *tuple(x_new)))
     sys.stdout.write(' '.join(str(x) for x in x_new))
     sys.exit(0)
+
+# for j in range(len(param_names)):
+#     i = np.argmin(scores)
+#     x = np.empty((1000, len(param_names)))
+#     x[:] = X[i, :]
+#     x[:, j] = np.linspace(ranges[j][0], ranges[j][1], 1000)
+#     m, s = GP.predict(x, return_std=True)
+#     plt.figure()
+#     plt.fill_between(x[:, j], m - 1.96 * s, m + 1.96 * s, alpha=.2)
+#     plt.scatter(X[:, j], scores, alpha=np.maximum(RBF(1.)(X[i], X), .1))
+#     plt.plot(x[:, j], m)
+# plt.show()

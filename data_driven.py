@@ -89,6 +89,10 @@ def train(model, dataset, dev, n_steps=128, main_loss='MSE', job_id=None, betas=
             loss = criterion(output, label, data, A, store=True) + alpha * reg / reg_n
             criterion.results['regs'].append((reg / reg_n).item())
 
+            if torch.isnan(loss):
+                print("TERMINATED DUE TO NAN VALUES")
+                return model, criterion.results, test_criterion.results
+
             # Gradient computation and optimiser step
             optim.zero_grad()
             loss.backward()

@@ -43,9 +43,7 @@ if __name__ == '__main__':
             result = []
             for t_data, t_H, t_A, t_v_a, t_v_o, t_label in data_loader:
                 out = model(t_data, t_H, t_A, t_v_a, t_v_o)
-                result.append(shear_l1_loss(dataset.label_scaling.inverse(out) + dataset.data_scaling.inverse(t_data),
-                                            dataset.label_scaling.inverse(t_label) + dataset.data_scaling.inverse(t_data),
-                                            reduction='none'))
+                result.append((out - t_label).square())
 
         # Aggregate losses
         value = torch.cat(result).mean()
