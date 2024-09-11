@@ -65,8 +65,8 @@ def acquisition(model):
 
 models = ['UNet', 'SurrogateNet']
 loss = ['MAE', 'MSE', 'SRE', 'MSE+SRE', 'MSE+MRE']
-param_names = ['alpha', 'noise_lvl', 'lr']
-ranges = np.array([(-3, 2), (-3, -.5), (-4, -1)])
+param_names = ['alpha', 'noise_lvl', 'lr', 'weight']
+ranges = np.array([(-3, 2), (-3, -.5), (-4, -1), (-1, 3)])
 scales = np.array([b - a for a, b in ranges])
 
 
