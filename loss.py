@@ -452,13 +452,13 @@ class Loss(torch.nn.Module):
         with torch.set_grad_enabled('MSE' in self.main and grad):
             mse = torch.nn.functional.mse_loss(dv, label)
         with torch.set_grad_enabled('SRE' in self.main and grad):
-            sre = strain_rate_loss(self.scalings['label'].inverse(dv) * 1e4, self.scalings['label'].inverse(label) * 1e4)
+            sre = strain_rate_loss(dv, label)
             msesre = mse + self.weight * sre
         with torch.set_grad_enabled('MRE' in self.main and grad):
-            mre = mean_relative_loss(self.scalings['label'].inverse(dv) * 1e4, self.scalings['label'].inverse(label) * 1e4, self.scalings['data'].inverse(v_old) * 1e4, eps=self.mre_eps * 1e4)
+            mre = mean_relative_loss(dv, label, v_old, eps=self.mre_eps)
             msemre = mse + self.weight * mre
         with torch.set_grad_enabled('MRDE' in self.main and grad):
-            mrde = mean_relative_loss(self.scalings['label'].inverse(dv) * 1e4, self.scalings['label'].inverse(label) * 1e4, eps=self.mrde_eps * 1e4)
+            mrde = mean_relative_loss(dv, label, eps=self.mrde_eps)
             msemrde = mse + mrde
             msesremrde = mse + sre + mrde
 
