@@ -7,6 +7,9 @@ type: software
 authors:
   - given-names: Brendan
     family-names: Analikwu
+identifiers:
+  - type: url
+    value: 'https://github.com/BrendanAnalikwu/MasterThesis'
 repository: 'https://github.com/BrendanAnalikwu/MasterThesisGascoigne'
 keywords:
   - Sea ice dynamics
