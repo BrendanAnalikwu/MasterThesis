@@ -182,6 +182,7 @@ def propagate(model, dataset: FourierData, v0, H0, A0, v_a, v_o):
     H[0] = dataset.H_scaling.inverse(H0)
     A = torch.empty((n_steps + 1, 1, *H0.shape[-2:]))
     A[0] = dataset.A_scaling.inverse(A0)
+    v_a = dataset.v_a_scaling.inverse(v_a)
 
     for i in range(n_steps):
         out = model(dataset.data_scaling(v[i, None]),
@@ -194,17 +195,6 @@ def propagate(model, dataset: FourierData, v0, H0, A0, v_a, v_o):
         A[i + 1] = advect(v[i + 1, None], A[i, None], 2., .5 / 256, lb=0., ub=1.)
 
     return v, H, A
-
-
-def im_to_disc(x):
-    with open('guess.vec', 'w') as f:
-        f.write("66049 2")
-        # Get order
-        # Sort order
-        # Reorder our field
-        # Write items
-
-        f.write('BackUpEnd')
 
 
 def bo_scatter():
@@ -231,15 +221,93 @@ def save_concentration(fn: str, im: torch.Tensor, bench=False):
     fig.savefig('plots/' + fn + '.pdf')
 
 
+def save_concentrations(*args, bench=False):
+    assert len(args) % 2 == 0
+    fns = []
+    ims = []
+    for i in range(int(len(args) / 2)):
+        fns.append(args[i * 2])
+        ims.append(args[i * 2 + 1])
+    for fn, im in zip(fns, ims):
+        save_concentration(fn, im, bench)
+
+
 def save_velocity(fn: str, im: torch.Tensor, vm=None, bench=False):
     fig = plt.figure(frameon=False, figsize=(4, 4))
     ax = plt.Axes(fig, [0., 0., 1., 1.])
     ax.set_axis_off()
     fig.add_axes(ax)
-    if not vm:
+    if vm is None:
         vm = im.abs().max()
     ax.imshow(SeaIceTransform.transform_velocity(im.T, 2, 0) if bench else im.T, cmap='seismic', vmax=vm, vmin=-vm, origin='lower')
     fig.savefig('plots/' + fn + f'[{vm:.2e}].pdf')
+
+
+def save_velocities(*args, vm=None, bench=False):
+    assert len(args) % 2 == 0
+    fns = []
+    ims = []
+    vm_ = 0
+    for i in range(int(len(args) / 2)):
+        fns.append(args[i * 2])
+        ims.append(args[i * 2 + 1])
+        vm_ = max(vm_, args[i * 2 + 1].abs().max())
+    if vm is None:
+        vm = vm_
+    for fn, im in zip(fns, ims):
+        save_velocity(fn, im, vm, bench)
+
+
+def save_error(fn: str, im: torch.Tensor, vm=None, bench=False):
+    fig = plt.figure(frameon=False, figsize=(4, 4))
+    ax = plt.Axes(fig, [0., 0., 1., 1.])
+    ax.set_axis_off()
+    fig.add_axes(ax)
+    if vm is None:
+        vm = im.abs().max()
+    ax.imshow(SeaIceTransform.transform_quantity(im.T, 2, 0) if bench else im.T, cmap='jet', vmax=vm, vmin=0, origin='lower')
+    fig.savefig('plots/' + fn + f'[{vm:.2e}].pdf')
+
+
+def save_errors(*args, vm=None, bench=False):
+    assert len(args) % 2 == 0
+    fns = []
+    ims = []
+    vm_ = 0
+    for i in range(int(len(args) / 2)):
+        fns.append(args[i * 2])
+        ims.append(args[i * 2 + 1])
+        vm_ = max(vm_, args[i * 2 + 1].abs().max())
+    if vm is None:
+        vm = vm_
+    for fn, im in zip(fns, ims):
+        save_error(fn, im, vm, bench)
+
+
+def save_velocity_mag(fn: str, im: torch.Tensor, vm=None, bench=False):
+    fig = plt.figure(frameon=False, figsize=(4, 4))
+    ax = plt.Axes(fig, [0., 0., 1., 1.])
+    ax.set_axis_off()
+    fig.add_axes(ax)
+    if vm is None:
+        vm = im.max()
+    ax.imshow(SeaIceTransform.transform_quantity(im.T, 2, 0) if bench else im.T, cmap='gist_heat_r', vmax=vm, vmin=0, origin='lower')
+    fig.savefig('plots/' + fn + f'[{vm:.2e}].pdf')
+
+
+def save_velocity_mags(*args, vm=None, bench=False):
+    assert len(args) % 2 == 0
+    fns = []
+    ims = []
+    vm_ = 0
+    for i in range(int(len(args) / 2)):
+        fns.append(args[i * 2])
+        ims.append(args[i * 2 + 1])
+        vm_ = max(vm_, args[i * 2 + 1].max())
+    if vm is None:
+        vm = vm_
+    for fn, im in zip(fns, ims):
+        save_velocity_mag(fn, im, vm, bench)
 
 
 def save_shear(fn: str, im: torch.Tensor, vmin: float = None, vmax: float = None, bench=False):
@@ -247,12 +315,31 @@ def save_shear(fn: str, im: torch.Tensor, vmin: float = None, vmax: float = None
     ax = plt.Axes(fig, [0., 0., 1., 1.])
     ax.set_axis_off()
     fig.add_axes(ax)
-    if not vmin:
+    if vmin is None:
         vmin = im.min()
-    if not vmax:
+    if vmax is None:
         vmax = im.max()
     ax.imshow(im.T.flip([0, 1]) if bench else im.T, cmap='jet', origin='lower', vmin=vmin, vmax=vmax)
     fig.savefig('plots/' + fn + f'[{vmin:.2e}, {vmax:.2e}].pdf')
+
+
+def save_shears(*args, vmin: float = None, vmax: float = None, bench=False):
+    assert len(args) % 2 == 0
+    fns = []
+    ims = []
+    vmin_ = 0
+    vmax_ = -100
+    for i in range(int(len(args) / 2)):
+        fns.append(args[i * 2])
+        ims.append(args[i * 2 + 1])
+        vmax_ = max(vmax_, args[i * 2 + 1].max())
+        vmin_ = min(vmin_, args[i * 2 + 1].min())
+    if vmax is None:
+        vmax = vmax_
+    if vmin is None:
+        vmin = vmin_
+    for fn, im in zip(fns, ims):
+        save_shear(fn, im, vmin, vmax, bench)
 
 
 if __name__ == "__main__":
@@ -289,3 +376,15 @@ if __name__ == "__main__":
 # output = model(*dataset[219:220][:-2])
 #
 # gg = sum([torch.autograd.grad(output[0,0,i,j], dataset.data, retain_graph=True)[0][219].abs().sum(dim=0) for i in range(257) for j in range(257)])
+# save_velocity_mags('Gascoigne_portion',quick(bench.label), 'MSE_portion',quick(out_MSE), 'MSRE_portion',quick(out_MSRE), 'MRE_portion',quick(out_MRE), bench=True)
+
+# args = []
+# for f in [f'{m} {l}' for m in ['U', 'S'] for l in ['MSE', 'SRE', 'MSRE', 'MRE']]:
+#     print(f)
+#     mo = load_model(f + ' bo/best', 0).eval()
+#     args.append('comp/'+f)
+#     args.append(mo(*dataset[19+20*19, None][:-1])[0,0, :64, -64:].detach())
+
+# X = np.loadtxt('experiments/sizes/register_size.txt', dtype=int)[:, [0, 2]]
+# d = {n: X[X[:, 1] == n, 0] for n in np.unique(X[:, 1])}
+# {n: [len(load_losses(f'test_losses_UNet_MSE+SRE_0.069765519654885_0.0012273341811892865_{i}.li')) for i in l] for n,l in d.items()}

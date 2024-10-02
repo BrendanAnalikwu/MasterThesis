@@ -98,7 +98,7 @@ if __name__ == "__main__":
         GP.fit(X, scores)
 
         # Fill with fakes
-        if len(running_ids) > 0:
+        if len(running_ids) > 10:
             X_running = data_params[np.isin(data_params[:, 0], running_ids), -len(param_names):]
             fake_scores = GP.predict(X_running)
             GP.fit(np.vstack((X, X_running)), np.hstack((scores, fake_scores)))

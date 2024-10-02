@@ -146,6 +146,7 @@ def train(model, dataset, dev, n_steps=128, main_loss='MSE', job_id=None, betas=
                          mse=np.mean(criterion.results['MSE'][-len(dataloader):]),
                          SL=np.mean(criterion.results['SL'][-len(dataloader):]),
                          test_SL=test_criterion.results['SL'][-1],
+                         test_mse=np.mean(test_criterion.results['MSE'][-1]),
                          bad_epochs=num_bad_epochs)
 
     torch.save(model, f'model_{model_id}.pt')

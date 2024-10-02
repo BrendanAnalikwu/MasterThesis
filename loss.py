@@ -404,12 +404,13 @@ def shear_l1_loss(input: torch.Tensor, target: torch.Tensor, reduction: str = 'm
     return torch.nn.functional.l1_loss(shear(strain_rate(input)), shear(strain_rate(target)), reduction=reduction)
 
 
-def strain_rate_loss(v: torch.tensor, label: torch.tensor):
+def strain_rate_loss(v: torch.tensor, label: torch.tensor, reduction = 'mean'):
     error = v - label
     if error.dim() == 3:
         error = error[None]
     e_x, e_y = finite_differences(error, 1.)
-    return (e_x[:, 0].square() + .5 * (e_x[:, 1] + e_y[:, 0]).square() + e_y[:, 1].square()).mean()
+    res = e_x[:, 0].square() + .5 * (e_x[:, 1] + e_y[:, 0]).square() + e_y[:, 1].square()
+    return res.mean() if reduction == 'mean' else res
 
 
 def mean_concentration_loss(dv: torch.Tensor, label: torch.Tensor, v_old: torch.Tensor, A: torch.tensor):

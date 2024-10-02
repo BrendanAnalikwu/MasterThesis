@@ -22,8 +22,9 @@ if __name__ == "__main__":
     parser.add_argument('alpha', help='Regularisation alpha', type=float, default=1.)
     parser.add_argument('noiselvl', type=float, default=0., help='Amount of noise to add to training data')
     parser.add_argument('learning_rate', type=float, default=1e-4, help='Optimiser\'s learning rate')
-    parser.add_argument('weight', type=float, default=1e-4, help='Weight of SRE/MRE loss')
-    parser.add_argument('-epsilon', type=float, default=1e-6, help='MRE epsilon')
+    parser.add_argument('-weight', type=float, default=-4, help='Weight of SRE/MRE loss')
+    parser.add_argument('-epsilon', type=float, default=-2.638, help='MRE epsilon')
+    parser.add_argument('-d', '--dataset_size', type=int, default=None, help='Size of dataset')
 
     args = parser.parse_args()
 
@@ -38,6 +39,7 @@ if __name__ == "__main__":
     learning_rate = 10 ** args.learning_rate
     weight = 10 ** args.weight
     eps = 10 ** args.epsilon
+    dataset_size = args.dataset_size
 
     dev = torch.device('cuda') if torch.cuda.is_available() else torch.device('cpu')
 
@@ -49,7 +51,7 @@ if __name__ == "__main__":
         warnings.warn("Model specifier not 0 or 1. Defaulted to UNet")
         model = UNet().to(dev)
 
-    dataset = FourierData(data_path, SeaIceTransform(), dev=dev, phys_i=10, max_size=None)
+    dataset = FourierData(data_path, SeaIceTransform(), dev=dev, phys_i=10, max_size=dataset_size)
 
     model, results, test_results = train(model, dataset, dev, 10000, main_loss, job_id, betas, batch_size, alpha,
                                          noise_lvl, True, learning_rate, weight, eps)
