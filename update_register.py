@@ -9,7 +9,7 @@ from torch.utils.data import DataLoader
 
 from bayesian_train import save_result
 from dataset import FourierData
-from loss import shear_l1_loss
+from loss import shear_l1_loss, mean_relative_loss, strain_rate_loss
 
 if __name__ == '__main__':
     dev = torch.device('cuda') if torch.cuda.is_available() else torch.device('cpu')
@@ -39,14 +39,19 @@ if __name__ == '__main__':
         with torch.no_grad():
             test_split = [np.where(n == np.array(dataset.names))[0][0] for n in
                           np.intersect1d(dataset.names, test_names)]
-            data_loader = DataLoader(dataset.get_subset(test_split), batch_size=16, shuffle=False)
+            data_loader = DataLoader(dataset.get_subset(test_split), batch_size=64, shuffle=False)
             result = []
+            result_sre = []
             for t_data, t_H, t_A, t_v_a, t_v_o, t_label in data_loader:
                 out = model(t_data, t_H, t_A, t_v_a, t_v_o)
-                result.append((out - t_label).square())
+                result.append(mean_relative_loss(out, t_label, t_data, eps=2.3107e-3, reduction='none'))
+                result_sre.append(strain_rate_loss(out, t_label, reduction='none'))
 
         # Aggregate losses
         value = torch.cat(result).mean()
         # Save to register_new.txt
         save_result(id, value.item(), 'register_new.txt')
+
+        value = torch.cat(result_sre).mean()
+        save_result(id, value.item(), 'register_sre.txt')
 
